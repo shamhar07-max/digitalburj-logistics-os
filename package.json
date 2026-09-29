@@ -1,22 +1,28 @@
 {
   "name": "digitalburj-logistics-os",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "UAE logistics & freight operating system for 5-30 person forwarders",
   "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
-    "apps/api",
-    "apps/web",
-    "packages/shared",
-    "packages/design-system"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
-    "dev": "yarn workspaces foreach -p run dev",
-    "build": "yarn workspaces foreach run build",
-    "lint": "yarn workspaces foreach run lint",
-    "test": "yarn workspaces foreach run test",
-    "type-check": "yarn workspaces foreach run type-check"
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w @digitalburj/api\" \"npm run dev -w @digitalburj/web\"",
+    "build": "npm run build -w @digitalburj/api && npm run build -w @digitalburj/web",
+    "test": "npm run test --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "db:migrate": "npm run migrate -w @digitalburj/api",
+    "db:seed": "npm run seed -w @digitalburj/api",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down"
   },
   "devDependencies": {
-    "typescript": "^5.3.0"
+    "concurrently": "^9.0.0",
+    "typescript": "^5.6.0"
   }
 }

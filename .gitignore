@@ -39,3 +39,8 @@ Thumbs.db
 
 # Docker
 .dockerignore
+
+# App runtime
+uploads/
+*.tsbuildinfo
+.vite/

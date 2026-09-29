@@ -1,69 +1,44 @@
-version: '3.8'
-
+# Local / small-server deployment. `cp .env.example .env`, set the secrets, then:  docker compose up -d --build
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: digitalburj
-      POSTGRES_PASSWORD: dev_password
-      POSTGRES_DB: digitalburj_dev
-    ports:
-      - '5432:5432'
+      POSTGRES_USER: ${POSTGRES_USER:-digitalburj}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+      POSTGRES_DB: ${POSTGRES_DB:-digitalburj}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U digitalburj']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-digitalburj} -d ${POSTGRES_DB:-digitalburj}']
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - '6379:6379'
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://digitalburj:dev_password@postgres:5432/digitalburj_dev
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev_secret_change_in_production
-    ports:
-      - '3001:3001'
+  app:
+    build: .
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./apps/api:/app
-      - /app/node_modules
-
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    environment:
-      REACT_APP_API_URL: http://localhost:3001
     ports:
-      - '3000:3000'
-    depends_on:
-      - api
+      - '${PORT:-3001}:3001'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-digitalburj}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-digitalburj}
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -hex 32)}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?set ENCRYPTION_KEY in .env (openssl rand -hex 32)}"
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3001}
+      ENABLE_SCHEDULER: 'true'
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-DigitalBurj <no-reply@example.com>}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-change-me}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
     volumes:
-      - ./apps/web:/app
-      - /app/node_modules
+      - uploads:/app/apps/api/uploads
 
 volumes:
-  postgres_data:
-
-networks:
-  default:
-    name: digitalburj_network
+  pgdata:
+  uploads:

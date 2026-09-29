@@ -1,0 +1,12 @@
+{
+  "name": "DigitalBurj Logistics OS",
+  "short_name": "DigitalBurj",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A2A2B",
+  "theme_color": "#0A2A2B",
+  "icons": [
+    { "src": "/favicon-app-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

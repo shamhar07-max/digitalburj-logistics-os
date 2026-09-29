@@ -1,0 +1,6 @@
+{
+  "name": "DigitalBurj Logistics OS",
+  "description": "Production-grade enterprise freight forwarding OS with UAE compliance, multi-modal execution, 8 AI agents, role atlas, and competitor intelligence benchmark.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
