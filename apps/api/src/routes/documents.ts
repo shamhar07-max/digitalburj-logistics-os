@@ -80,7 +80,8 @@ documentsRouter.get(
     const d = await one<any>({ query }, `SELECT d.body_html FROM documents d WHERE d.tenant_id=$1 AND d.id=$2 AND d.origin='generated'${extra}`, params);
     if (!d?.body_html) throw notFound();
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:");
+    // Only the print button's inline handler (`window.print()`) is allowed to run script; any injected markup could not.
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-hashes' 'sha256-MguIPR6qNR8D3B+eAlK+bIRTZe8t3wkOY4B/56Me9FU='; img-src data:");
     res.type('html').send(d.body_html);
   }),
 );

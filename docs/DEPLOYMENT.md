@@ -48,6 +48,10 @@ Database on Neon, app on Vercel. `vercel.json` serves the SPA as static output a
 * **Automation webhooks** run after the response and may be cut off when the function freezes; use the long-running container for reliable outbound webhooks.
 * Rate limits are per instance.
 
+### Running new migrations on a serverless deployment
+
+Migrations are not run on each deploy. Set `MIGRATE_TOKEN` (any long random string) in Vercel, redeploy, then open `https://<your-app>/api/migrate?key=<MIGRATE_TOKEN>` once; it applies any pending files from `apps/api/migrations/` and lists what it applied. Remove the variable afterwards to disable the endpoint. (Migration `003_merge_best.sql` is required by document generation, the Modal Hub and the velocity report.)
+
 ## Scaling and ops
 
 * Stateless app tier – scale horizontally; DB is the bottleneck (add read replica for reports).

@@ -18,7 +18,7 @@ Permission per verb: `GET` → `<module>:r`, `POST` → `c`, `PATCH` → `u`, `D
 | `/api/deals` | pipeline | GET (list, by id), POST, PATCH, DELETE | stage, owner_id, customer_id, source | title, lane | — |  |
 | `/api/rates` | rates | GET (list, by id), POST, PATCH, DELETE | mode, status, supplier_id, origin, destination | origin, destination, container_type | buy_rate, margin_pct |  |
 | `/api/shipments` | shipments | GET (list, by id), PATCH | status, mode, customer_id, priority, risk_level, ops_owner_id | number, container_no, bl_number, awb_number, cargo_description | cost | yes |
-| `/api/documents` | documents | GET (list, by id), PATCH, DELETE | shipment_id, customer_id, type, is_public | name, type | — |  |
+| `/api/documents` | documents | GET (list, by id), PATCH, DELETE | shipment_id, customer_id, type, is_public, origin | name, type, doc_no | — |  |
 | `/api/customs` | customs | GET (list, by id), POST, PATCH, DELETE | status, type, shipment_id | number, hs_code, description | — |  |
 | `/api/vehicles` | drivers | GET (list, by id), POST, PATCH, DELETE | status, type | plate, type | — |  |
 | `/api/drivers` | drivers | GET (list, by id), POST, PATCH, DELETE | status | name, phone, license_no | — |  |
@@ -45,6 +45,9 @@ Permission per verb: `GET` → `<module>:r`, `POST` → `c`, `PATCH` → `u`, `D
 | `/api/courses` | academy | GET (list, by id), POST, PATCH, DELETE | category, level | title, category | — |  |
 | `/api/talent` | talent | GET (list, by id), POST, PATCH, DELETE | verified, availability | name, headline | — |  |
 | `/api/growth-metrics` | growth | GET (list, by id), POST, PATCH, DELETE | metric | — | — |  |
+| `/api/equipment` | dispatch | GET (list, by id), POST, PATCH, DELETE | category, status | code, type, location | — |  |
+| `/api/capacity-allocations` | shipments | GET (list, by id), POST, PATCH, DELETE | mode, unit | carrier, vessel, voyage, route | — |  |
+| `/api/equipment-pools` | shipments | GET (list, by id), POST, PATCH, DELETE | mode, kind | code, label | — |  |
 
 ## Workflow & domain endpoints
 
@@ -100,6 +103,7 @@ Permission per verb: `GET` → `<module>:r`, `POST` → `c`, `PATCH` → `u`, `D
 | POST | `/api/docintel/extract` | auth | `docintel:c` |
 | GET | `/api/docintel/history` | auth | `docintel:r` |
 | GET | `/api/documents/:id/download` | auth | `documents:r` |
+| GET | `/api/documents/:id/render` | auth | `documents:r` |
 | GET | `/api/documents/pod/:podId/:kind` | auth | `dispatch:r` |
 | POST | `/api/documents/upload` | auth | `documents:c` |
 | POST | `/api/driver/expenses` | auth | `dispatch:u` |
@@ -159,7 +163,9 @@ Permission per verb: `GET` → `<module>:r`, `POST` → `c`, `PATCH` → `u`, `D
 | POST | `/api/shipments` | auth | `shipments:c` |
 | POST | `/api/shipments/:id/charges` | auth | `shipments:u` |
 | DELETE | `/api/shipments/:id/charges/:cid` | auth | `shipments:u` |
+| POST | `/api/shipments/:id/confirm-booking` | auth | `shipments:u` |
 | GET | `/api/shipments/:id/detail` | auth | `shipments:r` |
+| POST | `/api/shipments/:id/generate-documents` | auth | `shipments:u` |
 | PATCH | `/api/shipments/:id/milestones/:mid` | auth | `shipments:u` |
 | POST | `/api/shipments/:id/rotate-tracking-token` | auth | `shipments:u` |
 | POST | `/api/shipments/:id/status` | auth | `shipments:u` |
@@ -171,7 +177,7 @@ Permission per verb: `GET` → `<module>:r`, `POST` → `c`, `PATCH` → `u`, `D
 | GET | `/api/warehouse/utilisation` | auth | `warehouse:r` |
 | GET | `/api/webhooks/whatsapp` | public | — |
 
-_33 generic resources, 120 workflow endpoints._
+_36 generic resources, 123 workflow endpoints._
 
 ## WebSocket
 

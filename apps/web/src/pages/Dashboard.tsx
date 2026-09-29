@@ -5,6 +5,13 @@ import { api } from '../lib/api';
 import { useCan, useSession } from '../store/session';
 import { aed, ago, describeActivity, monthName } from '../lib/format';
 import { Bars, Card, Empty, Kpi, PageHead, Skeleton, StatusBadge, toast } from '../ui/kit';
+import { ModalHub } from '../components/ModalHub';
+import { ExplainButton } from '../components/Explain';
+import { Notes } from '../components/Notes';
+import type { ReactNode } from 'react';
+
+/** A KPI with an “explain this number” button that lists the records behind it. */
+const KpiX = ({ metric, children }: { metric: string; children: ReactNode }) => <div className="kpi-wrap">{children}<ExplainButton metric={metric} /></div>;
 
 const sevIcon = (s: string) => (s === 'high' ? 'bad' : s === 'medium' ? 'warn' : 'info');
 
@@ -32,13 +39,15 @@ export default function Dashboard() {
       {q.isLoading ? <Skeleton rows={6} /> : !d ? <Empty title="Dashboard unavailable" /> : (
         <>
           <div className="kpis">
-            {d.shipments && <Kpi icon={<Ship />} label="Active shipments" value={d.shipments.active} sub={`${d.shipments.today} new today · ${d.shipments.at_risk} at risk`} tone={d.shipments.at_risk ? 'down' : 'up'} onClick={() => nav('/shipments')} />}
+            {d.shipments && <KpiX metric="active_shipments"><Kpi icon={<Ship />} label="Active shipments" value={d.shipments.active} sub={`${d.shipments.today} new today · ${d.shipments.at_risk} at risk`} tone={d.shipments.at_risk ? 'down' : 'up'} onClick={() => nav('/shipments')} /></KpiX>}
             {d.pipeline && <Kpi icon={<Target />} label="Pipeline value" value={aed(d.pipeline.value, { compact: true })} sub={`${d.pipeline.deals} open deals`} onClick={() => nav('/pipeline')} />}
-            {d.ar && <Kpi icon={<CircleDollarSign />} label="Overdue AR" value={aed(d.ar.overdue, { compact: true })} sub={`${d.ar.overdueCustomers} customers · ${aed(d.ar.total, { compact: true })} total`} tone={d.ar.overdue ? 'down' : 'up'} onClick={() => nav('/invoices')} />}
+            {d.ar && <KpiX metric="overdue_ar"><Kpi icon={<CircleDollarSign />} label="Overdue AR" value={aed(d.ar.overdue, { compact: true })} sub={`${d.ar.overdueCustomers} customers · ${aed(d.ar.total, { compact: true })} total`} tone={d.ar.overdue ? 'down' : 'up'} onClick={() => nav('/invoices')} /></KpiX>}
             {d.cash !== undefined && <Kpi icon={<BookOpen />} label="Cash position" value={aed(d.cash, { compact: true })} sub="All bank accounts" onClick={() => nav('/accounting')} />}
-            {d.margin && <Kpi icon={<TrendingUp />} label="Margin (7 days)" value={`${d.margin.pct}%`} sub={`${aed(d.margin.revenue - d.margin.cost, { compact: true })} gross`} tone={d.margin.pct >= 12 ? 'up' : 'down'} onClick={() => nav('/jobcosting')} />}
-            {d.approvals && <Kpi icon={<CheckSquare />} label="Approvals" value={d.approvals.pending} sub={d.approvals.high ? `${d.approvals.high} high priority` : 'nothing urgent'} tone={d.approvals.high ? 'down' : undefined} onClick={() => nav('/approvals')} />}
+            {d.margin && <KpiX metric="margin_7d"><Kpi icon={<TrendingUp />} label="Margin (7 days)" value={`${d.margin.pct}%`} sub={`${aed(d.margin.revenue - d.margin.cost, { compact: true })} gross`} tone={d.margin.pct >= 12 ? 'up' : 'down'} onClick={() => nav('/jobcosting')} /></KpiX>}
+            {d.approvals && <KpiX metric="pending_approvals"><Kpi icon={<CheckSquare />} label="Approvals" value={d.approvals.pending} sub={d.approvals.high ? `${d.approvals.high} high priority` : 'nothing urgent'} tone={d.approvals.high ? 'down' : undefined} onClick={() => nav('/approvals')} /></KpiX>}
           </div>
+
+          {can('shipments', 'r') && <ModalHub />}
 
           <div className="grid g2">
             {d.priority && (
@@ -53,6 +62,7 @@ export default function Dashboard() {
                 ))}
               </Card>
             )}
+            <Notes />
             <Card title="Recent activity" icon={<Activity />}>
               {!d.activity?.length ? <Empty title="No activity yet" /> : d.activity.map((a: any, i: number) => (
                 <div className="list-item" key={i}>

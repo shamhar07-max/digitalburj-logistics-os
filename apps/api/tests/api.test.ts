@@ -535,6 +535,7 @@ describe('gate 14 · confirm booking & document generation', () => {
     expect(r.status).toBe(200);
     expect(r.headers['content-type']).toContain('text/html');
     expect(r.headers['content-security-policy']).toContain("default-src 'none'");
+    expect(r.headers['content-security-policy']).not.toContain("script-src 'unsafe-inline'");
     expect(r.text).toContain('COMMERCIAL INVOICE');
     expect(r.text).not.toContain('<script>alert(1)</script>');
     expect(r.text).toContain('&lt;script&gt;');

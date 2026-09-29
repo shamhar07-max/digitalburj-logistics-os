@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Ship, Target, FileText, Users, ShieldCheck, Truck, Smartphone, Warehouse, Tags, ShoppingCart, BookOpen, Receipt, LineChart, Landmark, CheckSquare,
-  UserCog, Wallet, FolderKanban, Bot, ScanText, Files, Zap, BarChart3, Inbox, MessageCircle, Rocket, GraduationCap, BadgeCheck, Globe, Lock, Settings, type LucideIcon,
+  UserCog, Wallet, FolderKanban, Bot, ScanText, Files, Zap, BarChart3, Inbox, MessageCircle, Rocket, GraduationCap, BadgeCheck, Globe, Lock, Settings, Gauge, Calculator, ClipboardCheck, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem { to: string; module: string; label: string; key: string; icon: LucideIcon }
@@ -19,6 +19,8 @@ export const NAV: NavSection[] = [
     { to: '/dispatch', module: 'dispatch', key: 'dispatch', label: 'Dispatch & Fleet', icon: Truck },
     { to: '/driver', module: 'dispatch', key: 'driverapp', label: 'Driver App', icon: Smartphone },
     { to: '/warehouse', module: 'warehouse', key: 'warehouse', label: 'Warehouse', icon: Warehouse },
+    { to: '/compliance', module: 'documents', key: 'compliance', label: 'Document Compliance', icon: ClipboardCheck },
+    { to: '/tools', module: 'shipments', key: 'tools', label: 'Calculators', icon: Calculator },
     { to: '/rates', module: 'rates', key: 'rates', label: 'Rate Management', icon: Tags },
     { to: '/procurement', module: 'procurement', key: 'procurement', label: 'Procurement', icon: ShoppingCart },
   ] },
@@ -26,6 +28,7 @@ export const NAV: NavSection[] = [
     { to: '/accounting', module: 'accounting', key: 'accounting', label: 'Accounting', icon: BookOpen },
     { to: '/invoices', module: 'invoices', key: 'invoices', label: 'Invoices', icon: Receipt },
     { to: '/jobcosting', module: 'costs', key: 'jobcosting', label: 'Job Costing', icon: LineChart },
+    { to: '/velocity', module: 'reports', key: 'velocity', label: 'Operational Velocity', icon: Gauge },
     { to: '/vat', module: 'vat', key: 'vat', label: 'UAE VAT', icon: Landmark },
     { to: '/approvals', module: 'approvals', key: 'approvals', label: 'Approvals', icon: CheckSquare },
   ] },

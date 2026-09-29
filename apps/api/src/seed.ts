@@ -191,6 +191,14 @@ export async function seedDemo(opts: { reset?: boolean; skipMigrate?: boolean } 
     await confirm(sh2); await step(sh2, 'in_transit');
     await confirm(sh3); await step(sh3, 'in_transit', 'arrived', 'customs');
     await confirm(sh4);
+    // These four were created back-to-back inside one script run, so every timestamp is identical. Spread them the way a
+    // real hand-off looks (accept → job → carrier → documents) so the velocity report has no impossible 0-minute orders.
+    for (const [i, id] of [sh1, sh2, sh3, sh4].entries()) {
+      const wait = [16, 9, 21, 13][i];
+      await query(`UPDATE quotes SET accepted_at = now() - ($2::int * interval '1 minute') WHERE id = (SELECT quote_id FROM shipments WHERE id=$1)`, [id, wait]);
+      await query(`UPDATE shipments SET created_at = now() - (($2::int - 4) * interval '1 minute') WHERE id=$1`, [id, wait]);
+      await query(`UPDATE milestones SET done_at = now() - (($2::int / 3) * interval '1 minute') WHERE shipment_id=$1 AND code='booking'`, [id, wait]);
+    }
 
     // customs: sh1 clears; sh3 held (missing CoO)
     const d1 = (await customs.get(`/customs?shipment_id=${sh1}`)).data[0];

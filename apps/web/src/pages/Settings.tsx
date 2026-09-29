@@ -34,6 +34,7 @@ function Company() {
       </Card>
       <Card title="Approval policy & defaults">
         <div className="row2">{THRESH.map((f) => <Field key={f.name} spec={f} value={s[f.name]} onChange={(x) => setS({ ...s, [f.name]: x })} editing={ro} />)}</div>
+        <Field spec={{ name: 'auto_generate_docs', label: 'Generate documents on booking confirmation', type: 'checkbox', hint: 'Creates the B/L, AWB or CMR, Packing List and Commercial Invoice as soon as a booking is confirmed' }} value={s.auto_generate_docs !== false} onChange={(x) => setS({ ...s, auto_generate_docs: !!x })} editing={ro} />
         {!ro && <button className="btn primary" onClick={() => save.mutate()}>Save policy</button>}
       </Card>
       <Card title="Legal entities" className="g2-span" pad={false} actions={can('settings', 'c') && <button className="btn sm outline" onClick={() => setEnt(true)}><Plus /> Add entity</button>}>

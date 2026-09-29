@@ -19,6 +19,8 @@ People: HRMS, leave, payroll with **WPS SIF** builder, compliance calendar (trad
 
 Platform: 12 roles × 34 modules RBAC with field-level cost hiding · custom roles · multi-entity scoping · audit log · notifications + WebSocket live updates · automation engine (SSRF-guarded webhooks) · WhatsApp Cloud API inbox · customer portal + public tracking/request pages · AI assistant · reports (lane profitability, job costing, sales, attribution) · command palette (⌘K) · EN/AR.
 
+Modal operations (merged from the design prototype, rebuilt on real data — see [`docs/COMPARISON.md`](docs/COMPARISON.md)): **confirm-booking → auto-generated House B/L / HAWB / CMR + Packing List + Commercial Invoice** (versioned, hash-stamped, printable) · **Operational Velocity** report (quote accepted → documents generated, compared across Sea / Air / Road with diagnosed bottlenecks and CSV) · **Modal Hub** dashboard swimlanes (vessel slots, flight uplift, fleet and equipment utilisation; every figure tagged live / register / sample) · "explain this number" drill-downs · document-compliance scorecard · calculators (chargeable weight, demurrage, duty + VAT) · branch notes · richer fleet register (fuel, Salik, service km).
+
 See [`docs/COMPETITORS.md`](docs/COMPETITORS.md) for how this maps to Freightos, Magaya, CargoWise, Cargoo and others, and [`docs/UAE-READINESS.md`](docs/UAE-READINESS.md) for what is real vs. an adapter that needs credentials.
 
 ## Quick start (local)

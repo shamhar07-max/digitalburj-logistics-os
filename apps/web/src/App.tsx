@@ -42,6 +42,9 @@ const Academy = lazy(() => import('./pages/Academy'));
 const Talent = lazy(() => import('./pages/Talent'));
 const PortalAdmin = lazy(() => import('./pages/PortalAdmin'));
 const Permissions = lazy(() => import('./pages/Permissions'));
+const Velocity = lazy(() => import('./pages/Velocity'));
+const Tools = lazy(() => import('./pages/Tools'));
+const Compliance = lazy(() => import('./pages/Compliance'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Portal = lazy(() => import('./pages/Portal'));
 const PublicTrack = lazy(() => import('./pages/PublicTrack'));
@@ -108,6 +111,9 @@ export default function App() {
           <Route path="accounting" element={G('accounting', <Accounting />)} />
           <Route path="invoices" element={G('invoices', <Invoices />)} />
           <Route path="jobcosting" element={G('costs', <JobCosting />)} />
+          <Route path="velocity" element={G('reports', <Velocity />)} />
+          <Route path="compliance" element={G('documents', <Compliance />)} />
+          <Route path="tools" element={G('shipments', <Tools />)} />
           <Route path="vat" element={G('vat', <Vat />)} />
           <Route path="approvals" element={G('approvals', <Approvals />)} />
           <Route path="hrms" element={G('hrms', <Hrms />)} />
