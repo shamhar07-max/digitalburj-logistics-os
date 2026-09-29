@@ -26,7 +26,7 @@ import { documentsRouter, docintelRouter } from './routes/documents';
 import { inboxRouter, webhooksRouter } from './routes/inbox';
 import { dashboardRouter, aiRouter, reportsRouter, searchRouter, notificationsRouter } from './routes/intel';
 import { portalRouter, publicRouter } from './routes/portal';
-import { adminRouter } from './routes/admin';
+import { adminRouter, lookupRouter } from './routes/admin';
 
 /** Custom routers that must be mounted BEFORE the generic CRUD router on the same base path. */
 const custom: Record<string, express.Router[]> = {
@@ -64,7 +64,7 @@ export function createApp() {
   // Rate limits
   const api = express.Router();
   api.use(rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false }));
-  api.use('/auth/login', rateLimit({ windowMs: 15 * 60_000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { error: { message: 'Too many attempts. Try again later.' } } }));
+  api.use('/auth/login', rateLimit({ windowMs: 15 * 60_000, limit: config.LOGIN_RATE_LIMIT, standardHeaders: true, legacyHeaders: false, message: { error: { message: 'Too many attempts. Try again later.' } } }));
   api.use('/auth/register', rateLimit({ windowMs: 60 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false }));
   api.use('/auth/forgot', rateLimit({ windowMs: 60 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false }));
 
@@ -82,6 +82,7 @@ export function createApp() {
   api.use('/notifications', notificationsRouter);
   api.use('/portal', portalRouter);
   api.use('/admin', adminRouter);
+  api.use('/lookup', lookupRouter);
   api.use('/quotes', quotesRouter);
   api.use('/accounting', accountingRouter);
   api.use('/dispatch', dispatchRouter);

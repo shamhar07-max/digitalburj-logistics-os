@@ -75,6 +75,11 @@ Freight Prepaid`;
     expect(r.warnings.some((w) => w.includes('MSCU1234567'))).toBe(true);
     expect(r.confidence).toBeGreaterThan(0.4);
   });
+  it('does not mistake the B/L number for a container and ranks valid containers first', () => {
+    const r = extractWithRules('BL', 'B/L No: MEDU7771234\nContainer: MSCU1234567, CSQU3054383');
+    expect(r.fields.bl_number).toBe('MEDU7771234');
+    expect(r.fields.container_numbers).toEqual(['CSQU3054383', 'MSCU1234567']);
+  });
   it('extracts invoice essentials', () => {
     const r = extractWithRules('INVOICE', 'Invoice No: INV-2026-0042\nDate: 2026-09-01\nSeller: Acme Ltd\nBuyer: Al Noor Trading\nCIF Dubai\nTotal Amount USD 12,450.00\nCountry of Origin: China');
     expect(r.fields).toMatchObject({ invoice_number: 'INV-2026-0042', currency: 'USD', incoterm: 'CIF', total_amount: 12450 });

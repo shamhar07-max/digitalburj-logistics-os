@@ -1,130 +1,80 @@
 # DigitalBurj Logistics OS
 
-🚛 UAE logistics & freight operating system for 5–30 person forwarders.
+A multi-tenant operating system for UAE freight forwarders and logistics companies (5–100 staff): **quote → job → customs → dispatch → POD → invoice → cash**, with the back office (accounting, VAT, HR/payroll, procurement, warehouse) and customer/driver surfaces on the same data.
 
-**Core Flow:** Quote → Shipment → Delivery → Invoice → Cash
+| Layer | Stack |
+|---|---|
+| API | Node 20, Express 4, TypeScript, PostgreSQL 16 (`pg`), zod, JWT + rotating refresh tokens, `ws`, pino |
+| Web | React 18, Vite, React Router 6, TanStack Query 5, zustand, plain CSS design tokens (RTL + dark mode) |
+| Shared | `packages/shared` – RBAC matrix, money/VAT maths, state machines, UAE validators (TRN, IBAN, ISO 6346, MSISDN) |
+| Ops | Multi-stage `Dockerfile`, `docker-compose.yml`, GitHub Actions CI |
 
-## Project Structure
+## What is in the box
 
-```
-├── apps/
-│   ├── api/                 # Node.js + Express backend
-│   └── web/                 # React + TypeScript frontend
-├── packages/
-│   ├── shared/              # Shared types, utilities, constants
-│   └── design-system/       # Design tokens, components, icons
-├── docker-compose.yml       # Development environment
-└── docs/                    # Architecture & specifications
-```
+Operations: shipments (sea/air/road/multimodal) with milestone templates, risk engine and live tracking · quotes with rate cards, approvals and one-click quote→job · customs declarations and HS codes · dispatch board, trips, drivers, vehicles, an **offline-first driver app** (POD capture, expenses, idempotent sync) · warehouse (bins, receive/move/release/count) · procurement · CRM pipeline · document vault with **document intelligence** (B/L, invoice, packing list extraction with ISO 6346 validation; Claude-powered when a key is set, deterministic rules otherwise).
 
-## Quick Start
+Finance: charges & job costing · invoices (UAE VAT codes S/Z/E/O, credit notes, PINT-AE-style UBL XML) · double-entry ledger with balance enforcement, bank reconciliation, aging · VAT return workings · approvals with segregation of duties.
 
-### Prerequisites
-- Node.js 18+
-- Yarn 3.x
-- PostgreSQL 15+
-- Docker & Docker Compose (optional)
+People: HRMS, leave, payroll with **WPS SIF** builder, compliance calendar (trade licence, visas, insurance).
 
-### Development
+Platform: 12 roles × 34 modules RBAC with field-level cost hiding · custom roles · multi-entity scoping · audit log · notifications + WebSocket live updates · automation engine (SSRF-guarded webhooks) · WhatsApp Cloud API inbox · customer portal + public tracking/request pages · AI assistant · reports (lane profitability, job costing, sales, attribution) · command palette (⌘K) · EN/AR.
+
+See [`docs/COMPETITORS.md`](docs/COMPETITORS.md) for how this maps to Freightos, Magaya, CargoWise, Cargoo and others, and [`docs/UAE-READINESS.md`](docs/UAE-READINESS.md) for what is real vs. an adapter that needs credentials.
+
+## Quick start (local)
 
 ```bash
-# Install dependencies
-yarn install
+# 1. Postgres 16 (any way you like), e.g.
+docker run -d --name dbj-pg -e POSTGRES_USER=digitalburj -e POSTGRES_PASSWORD=dev_password \
+  -e POSTGRES_DB=digitalburj_dev -p 5432:5432 postgres:16
 
-# Start development server (all apps)
-yarn dev
+# 2. Install, migrate, seed the demo tenant
+npm install
+cp apps/api/.env.example apps/api/.env
+npm run db:migrate
+npm run db:seed          # "Al Noor Logistics LLC" demo data
 
-# Run API only
-cd apps/api && yarn dev
-
-# Run Web only
-cd apps/web && yarn dev
+# 3. Run API (:3001) and web (:3000) together
+npm run dev
 ```
 
-### With Docker
+Sign in at <http://localhost:3000> — password for every demo user is `Demo@12345!`:
+
+| User | Role |
+|---|---|
+| owner@alnoor.ae | Owner (everything) |
+| sales@alnoor.ae | Sales (cannot see buy rates / margins) |
+| ops@alnoor.ae · customs@alnoor.ae · dispatch@alnoor.ae · warehouse@alnoor.ae | Operations roles |
+| finance@alnoor.ae · hr@alnoor.ae | Finance / HR |
+| driver@alnoor.ae | Driver app (`/driver`) |
+| portal@noon-demo.ae | Customer portal (`/portal`) |
+
+**Change or delete the demo users before any real deployment.**
+
+## Docker
 
 ```bash
-docker-compose up -d
+cp .env.example .env     # set JWT_SECRET and ENCRYPTION_KEY: openssl rand -hex 32
+docker compose up --build
 ```
 
-## User Roles
+The image serves API and built SPA on one port (`:3001`), runs migrations on boot and exposes `/healthz`. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-- **Owner** – Full system control, approval authority, KPIs
-- **Sales** – Lead/RFQ management, quote building, customer rates
-- **Operations** – Job execution, milestone tracking, exception handling
-- **Customs** – Declaration management, compliance, mismatch resolution
-- **Transport** – Dispatch, driver assignment, POD collection
-- **Warehouse** – Inbound, stock, picking, counting
-- **Finance** – Costing, invoicing, AP/AR, reconciliation
-- **Customer** – Portal: quote acceptance, shipment tracking, documents, invoices
-- **Partner** – Portal: assigned tasks, document upload, response tracking
-- **Admin** – Users, roles, policies, automations, audit trail
+## Quality gates
 
-## Core Workflows
+```bash
+npm run type-check   # shared + api + web
+npm run test         # 16 shared + 67 API (unit + Postgres integration) + 18 web tests
+npm run build        # tsup bundle + Vite build
+node e2e/flows.mjs   # 10 real-browser flows (Playwright-core; see e2e/README.md)
+```
 
-1. **Sales**: Lead inbox → RFQ → Rate search → Quote builder → Quote sent → History
-2. **Operations**: Job detail (Timeline, Cargo, Legs, Documents, Customs, Transport, Charges, Conversations)
-3. **Customs**: Case list → Checklist → Mismatch review → Submission/Status
-4. **Transport**: Dispatch board → Trip detail → Driver mobile → POD review
-5. **Warehouse**: Inbound → Stock → Pick → Count → Discrepancy
-6. **Finance**: Job cost sheet → Unbilled queue → AP match → Invoice draft → AR ageing
-7. **Customer Portal**: Home → Quote acceptance → Shipment timeline → Documents → Invoices
-8. **Owner Desk**: Today card → At Risk → Money → Customers → Decisions
-
-## Architecture
-
-### Backend
-- **Framework**: Express.js + TypeScript
-- **Database**: PostgreSQL (multi-tenant schemas)
-- **Auth**: JWT + role-based access control (RBAC)
-- **Real-time**: WebSocket for notifications & live updates
-- **File Storage**: AWS S3 / Local filesystem
-- **Queue**: Bull for async job processing
-
-### Frontend
-- **Framework**: React 18 + TypeScript
-- **State**: Zustand + React Query
-- **Styling**: Tailwind CSS + custom design tokens
-- **UI Components**: Custom library with variants
-- **i18n**: Arabic (RTL) + English
-- **Maps**: Leaflet or Mapbox for route visualization
-
-### Design System
-- **Colors**: Navy/Blue primary, grey neutrals, semantic status (green/amber/red)
-- **Typography**: Inter + IBM Plex Sans (English); Cairo or Noto Sans Arabic
-- **Spacing**: 4px base unit
-- **Icons**: Custom SVG library
-- **Responsive**: Mobile-first, desktop optimized
-
-## Features
-
-✅ Multi-tenant architecture
-✅ Role-based permissions
-✅ Quote → Job → Invoice workflow
-✅ Real-time dashboard
-✅ Customer portal
-✅ Driver mobile app
-✅ Owner approval queue
-✅ Audit trail
-✅ Arabic RTL support
-✅ Dark mode
-✅ Offline sync
-✅ Document management
-✅ Notification system
-✅ API integrations (carriers, customs, payment)
-
-## Environment Variables
-
-See `.env.example` files in each app directory.
+API integration tests run against a real Postgres (`digitalburj_test`) and cover auth/lockout, tenant isolation, field-level RBAC, portal scoping, workflow integrity, POD idempotency, ledger balance, payroll/SIF, webhook signatures and document extraction.
 
 ## Documentation
 
-- [Architecture Overview](./docs/ARCHITECTURE.md)
-- [API Specification](./docs/API.md)
-- [Database Schema](./docs/DATABASE.md)
-- [Design System](./packages/design-system/README.md)
-- [Accessibility](./docs/ACCESSIBILITY.md)
+[Architecture](docs/ARCHITECTURE.md) · [Database](docs/DATABASE.md) · [API reference (generated)](docs/API.md) · [Security](docs/SECURITY.md) · [Deployment](docs/DEPLOYMENT.md) · [UAE readiness](docs/UAE-READINESS.md) · [Competitor analysis](docs/COMPETITORS.md) · [ADRs](docs/adr/)
 
-## License
+## Licence
 
-MIT
+Proprietary — © DigitalBurj.

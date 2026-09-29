@@ -70,13 +70,14 @@ export function extractWithRules(kind: DocKind, text: string): Extraction {
     f.voyage = first(t, /Voy(?:age)?\.?\s*(?:No\.?)?\s*[:\-]?\s*([A-Z0-9]{3,10})/i);
     f.port_of_loading = first(t, /Port of Loading\s*[:\-]\s*([^\n]{2,60})/i);
     f.port_of_discharge = first(t, /Port of Discharge\s*[:\-]\s*([^\n]{2,60})/i);
-    f.container_numbers = containers;
+    // B/L numbers (e.g. MEDU7771234) look exactly like container numbers: drop it, then rank ISO 6346-valid numbers first
+    f.container_numbers = containers.filter((c) => c !== String(f.bl_number || '').replace(/\s/g, '')).sort((a, b) => Number(isValidContainerNo(b)) - Number(isValidContainerNo(a)));
     f.packages = num(first(t, /(?:No\.? of )?(?:Packages|Pkgs|Cartons|Pieces)\s*[:\-]?\s*([\d,]+)/i));
     f.gross_weight_kg = weight('Gross\\s*Weight');
     f.volume_cbm = num(first(t, /(?:Measurement|Volume)\s*[:\-]?\s*([\d.]+)\s*(?:CBM|M3)/i));
     f.description = first(t, /(?:Description of Goods|Cargo Description|Said to contain)\s*[:\-]\s*([^\n]{3,200})/i);
     f.freight_terms = first(t, /Freight\s*(Prepaid|Collect)/i);
-    for (const c of containers) if (!isValidContainerNo(c)) warnings.push(`Container ${c} fails ISO 6346 check-digit validation — verify the number`);
+    for (const c of f.container_numbers as string[]) if (!isValidContainerNo(c)) warnings.push(`Container ${c} fails ISO 6346 check-digit validation — verify the number`);
   } else if (kind === 'AWB') {
     f.awb_number = first(t, /\b(\d{3}[\s-]?\d{8})\b/);
     f.shipper = first(t, /Shipper(?:'s Name)?\s*[:\-]\s*([^\n]{3,120})/i);

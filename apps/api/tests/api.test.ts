@@ -450,3 +450,39 @@ describe('gate 12 · intelligence & reporting', () => {
     expect(r.some((x: any) => x.type === 'Invoice')).toBe(false);
   });
 });
+
+describe('gate 13 · documents & AI document intelligence', () => {
+  it('uploads a document, serves it back, and enforces portal visibility', async () => {
+    const ship = (await api('get', '/shipments?status=invoiced', 'ops')).body.data[0];
+    const up = await api('post', '/documents/upload', 'ops').field('shipment_id', ship.id).field('type', 'BL').field('is_public', 'false').attach('file', Buffer.from('%PDF-1.4 test bl'), { filename: 'bl.pdf', contentType: 'application/pdf' });
+    expect(up.status).toBe(201);
+    const dl = await api('get', `/documents/${up.body.id}/download`, 'ops').buffer(true).parse((res: any, cb: any) => { const c: Buffer[] = []; res.on('data', (d: Buffer) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    expect(dl.status).toBe(200);
+    expect(String(dl.body)).toContain('test bl');
+    expect(dl.headers['x-content-type-options']).toBe('nosniff');
+    // internal docs are invisible to the customer; sharing it makes it visible
+    expect((await api('get', `/documents/${up.body.id}/download`, 'customer')).status).toBe(404);
+    await api('patch', `/documents/${up.body.id}`, 'ops').send({ is_public: true }).expect(200);
+    const shipCust = (await api('get', `/shipments/${ship.id}`, 'owner')).body.customer_id;
+    const noon = (await api('get', '/customers?search=Noon', 'owner')).body.data[0];
+    expect((await api('get', `/documents/${up.body.id}/download`, 'customer')).status).toBe(shipCust === noon.id ? 200 : 404);
+  });
+  it('rejects unsupported file types and oversized bodies', async () => {
+    const bad = await api('post', '/documents/upload', 'ops').field('type', 'OTHER').attach('file', Buffer.from('MZ...'), { filename: 'evil.exe', contentType: 'application/x-msdownload' });
+    expect(bad.status).toBeGreaterThanOrEqual(400);
+    expect((await api('post', '/documents/upload', 'customer')).status).toBe(403);
+  });
+  it('extracts BL fields from pasted text and applies only to empty shipment fields', async () => {
+    const ship = (await api('post', '/shipments', 'ops').send({ customer_id: (await api('get', '/customers?search=Danube', 'owner')).body.data[0].id, mode: 'sea_fcl', carrier: 'KEEP-ME' })).body;
+    const ex = await api('post', '/docintel/extract', 'ops').field('doc_type', 'BL').field('text', 'B/L No: MEDU7771234\nVessel: MSC AURORA\nPort of Loading: Shanghai\nPort of Discharge: Jebel Ali\nContainer: CSQU3054383\nGross Weight: 12,500 KGS');
+    expect(ex.status).toBe(200);
+    expect(ex.body.engine).toBe('rules');
+    expect(ex.body.fields.bl_number).toBe('MEDU7771234');
+    const applied = await api('post', `/docintel/${ex.body.id}/apply`, 'ops').send({ shipment_id: ship.id });
+    expect(applied.body.applied).toEqual(expect.arrayContaining(['bl_number', 'container_no', 'weight_kg']));
+    const after = (await api('get', `/shipments/${ship.id}`, 'ops')).body;
+    expect(after.container_no).toBe('CSQU3054383');
+    expect(after.carrier).toBe('KEEP-ME');
+  });
+});
+

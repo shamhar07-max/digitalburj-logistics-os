@@ -24,6 +24,8 @@ const schema = z.object({
   S3_REGION: z.string().default('me-central-1'),
   S3_ENDPOINT: z.string().optional(),
   ENABLE_SCHEDULER: bool(true),
+  /** max login attempts per IP per 15 min (raise only for automated test runs) */
+  LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).default(30),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5-5'),
   RESEND_API_KEY: z.string().optional(),

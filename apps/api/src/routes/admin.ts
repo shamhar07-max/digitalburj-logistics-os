@@ -13,6 +13,16 @@ import { sendPasswordLink } from './auth';
 
 export const adminRouter = Router();
 
+/** Lightweight directory for pickers (owners, assignees). Staff only; no emails/roles beyond what a picker needs. */
+export const lookupRouter = Router();
+lookupRouter.get(
+  '/users',
+  wrap(async (req, res) => {
+    if (['customer', 'partner'].includes(req.user!.baseRole)) throw forbidden();
+    res.json({ data: await many({ query }, `SELECT id, name, role FROM users WHERE tenant_id=$1 AND is_active AND role NOT IN ('customer','partner') ORDER BY name`, [req.user!.tenantId]) });
+  }),
+);
+
 // ───────── Users ─────────
 adminRouter.get(
   '/users',

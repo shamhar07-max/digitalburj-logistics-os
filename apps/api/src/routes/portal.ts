@@ -26,7 +26,7 @@ portalRouter.get(
       one({ query }, 'SELECT id, name, code FROM customers WHERE id=$1', [c]),
       many({ query }, `SELECT s.id, s.number, s.status, s.mode, s.origin, s.destination, s.eta, s.container_no,
           (SELECT count(*) FILTER (WHERE status='done')::text || '/' || count(*)::text FROM milestones m WHERE m.shipment_id=s.id) AS progress
-          FROM shipments s WHERE s.tenant_id=$1 AND (s.customer_id=$2 OR s.consignee_id=$2) AND s.status NOT IN ('closed','cancelled') ORDER BY s.created_at DESC LIMIT 20`, [t, c]),
+          FROM shipments s WHERE s.tenant_id=$1 AND (s.customer_id=$2 OR s.consignee_id=$2) AND s.status NOT IN ('cancelled') AND (s.status NOT IN ('delivered','invoiced','closed') OR s.delivered_at > now() - interval '7 days') ORDER BY s.created_at DESC LIMIT 20`, [t, c]),
       many({ query }, `SELECT id, number, total, currency, valid_until, origin, destination, mode FROM quotes WHERE tenant_id=$1 AND customer_id=$2 AND status='sent' ORDER BY sent_at DESC`, [t, c]),
       many({ query }, `SELECT id, number, total, paid, due_date, status FROM invoices WHERE tenant_id=$1 AND customer_id=$2 AND kind='tax_invoice' AND status IN ('sent','partial','overdue') ORDER BY due_date`, [t, c]),
       many({ query }, `SELECT id, name, type, created_at FROM documents WHERE tenant_id=$1 AND is_public AND (customer_id=$2 OR shipment_id IN (SELECT id FROM shipments WHERE customer_id=$2 OR consignee_id=$2)) ORDER BY created_at DESC LIMIT 10`, [t, c]),
