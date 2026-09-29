@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/migrate.ts', 'src/seed.ts', 'src/serverless.ts', 'src/cron.ts'],
+  entry: ['src/index.ts', 'src/migrate.ts', 'src/seed.ts', 'src/serverless.ts', 'src/cron.ts', 'src/demoSeed.ts'],
   format: ['esm'],
   target: 'node20',
   platform: 'node',

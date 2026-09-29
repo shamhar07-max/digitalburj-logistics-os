@@ -46,13 +46,13 @@ function client(base: string, token?: string) {
   return { get: (p: string) => call('GET', p), post: (p: string, b?: any) => call('POST', p, b ?? {}), patch: (p: string, b: any) => call('PATCH', p, b), put: (p: string, b: any) => call('PUT', p, b), del: (p: string) => call('DELETE', p) };
 }
 
-export async function seedDemo(opts: { reset?: boolean } = {}) {
+export async function seedDemo(opts: { reset?: boolean; skipMigrate?: boolean } = {}) {
   if (config.NODE_ENV === 'production' && process.env.SEED_DEMO !== 'true') throw new Error('Refusing to seed demo data in production (set SEED_DEMO=true to override)');
   if (opts.reset) {
     if (config.NODE_ENV === 'production') throw new Error('--reset is never allowed in production');
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
   }
-  await migrate();
+  if (!opts.skipMigrate) await migrate();
   if (await one({ query }, "SELECT 1 FROM tenants WHERE slug='al-noor'")) {
     logger.info('demo tenant already exists — skipping seed (use --reset to rebuild)');
     return { skipped: true };

@@ -6,7 +6,8 @@
   "outputDirectory": "apps/web/dist",
   "functions": {
     "api/index.mjs": { "maxDuration": 30, "includeFiles": "apps/api/dist/**" },
-    "api/cron.mjs": { "maxDuration": 60, "includeFiles": "apps/api/dist/**" }
+    "api/cron.mjs": { "maxDuration": 60, "includeFiles": "apps/api/dist/**" },
+    "api/seed.mjs": { "maxDuration": 300, "includeFiles": "apps/api/dist/**" }
   },
   "crons": [{ "path": "/api/cron", "schedule": "0 3 * * *" }],
   "rewrites": [
