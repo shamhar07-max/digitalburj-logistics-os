@@ -21,6 +21,7 @@ export interface NewShipment {
   incoterm?: string | null;
   cargo_description?: string | null;
   container_type?: string | null;
+  containers?: number | null;
   weight_kg?: number | null;
   volume_cbm?: number | null;
   cargo_value?: number | null;
@@ -36,11 +37,11 @@ export async function createShipment(db: Db, tenantId: string, userId: string, s
   const row = (
     await db.query(
       `INSERT INTO shipments (tenant_id, entity_id, number, quote_id, customer_id, consignee_id, mode, origin, destination, pol, pod, carrier, incoterm, cargo_description,
-                              container_type, weight_kg, volume_cbm, cargo_value, etd, eta, priority, ops_owner_id, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
+                              container_type, containers, weight_kg, volume_cbm, cargo_value, etd, eta, priority, ops_owner_id, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
       [
         tenantId, s.entity_id ?? null, number, s.quote_id ?? null, s.customer_id ?? null, s.consignee_id ?? null, s.mode, s.origin ?? null, s.destination ?? null, s.pol ?? null, s.pod ?? null,
-        s.carrier ?? null, s.incoterm ?? null, s.cargo_description ?? null, s.container_type ?? null, s.weight_kg ?? null, s.volume_cbm ?? null, s.cargo_value ?? null,
+        s.carrier ?? null, s.incoterm ?? null, s.cargo_description ?? null, s.container_type ?? null, s.containers ?? 1, s.weight_kg ?? null, s.volume_cbm ?? null, s.cargo_value ?? null,
         s.etd ?? null, s.eta ?? null, s.priority ?? 'normal', s.ops_owner_id ?? null, userId,
       ],
     )
@@ -51,7 +52,7 @@ export async function createShipment(db: Db, tenantId: string, userId: string, s
   for (const m of tpl) {
     const due = new Date(base.getTime() + m.offsetDays * 86_400_000);
     await db.query(`INSERT INTO milestones (tenant_id, shipment_id, code, name, due_at, sort, status, done_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [
-      tenantId, row.id, m.code, m.name, due.toISOString(), sort++, m.code === 'booking' ? 'done' : 'pending', m.code === 'booking' ? new Date().toISOString() : null,
+      tenantId, row.id, m.code, m.name, due.toISOString(), sort++, 'pending', null,
     ]);
   }
   publish({ tenantId, type: 'shipment.created', entityType: 'shipment', entityId: row.id, payload: { number, customer_id: s.customer_id }, userId });

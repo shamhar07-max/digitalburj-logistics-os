@@ -118,7 +118,7 @@ export const STATUS_MILESTONE: Partial<Record<ShipmentStatus, string[]>> = {
   delivered: ['delivery'],
 };
 
-export const DOC_TYPES = ['BL', 'AWB', 'COMMERCIAL_INVOICE', 'PACKING_LIST', 'COO', 'DO', 'CUSTOMS_DECLARATION', 'INSURANCE', 'POD', 'OTHER'] as const;
+export const DOC_TYPES = ['BL', 'AWB', 'CMR', 'COMMERCIAL_INVOICE', 'PACKING_LIST', 'COO', 'DO', 'CUSTOMS_DECLARATION', 'INSURANCE', 'POD', 'OTHER'] as const;
 
 export const CHARGE_TYPES = [
   'freight', 'thc', 'baf', 'customs_clearance', 'duty', 'disbursement', 'trucking', 'handling', 'storage', 'demurrage', 'detention', 'documentation', 'insurance', 'other',

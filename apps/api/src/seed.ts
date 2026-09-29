@@ -184,10 +184,13 @@ export async function seedDemo(opts: { reset?: boolean; skipMigrate?: boolean } 
     await ops.patch(`/shipments/${sh3}`, { container_no: containerNo('MAEU', 553390), bl_number: 'MAEU220819907', carrier: 'Maersk', vessel: 'MAERSK SENTOSA', voyage: '2611E', pol: 'Nhava Sheva', pod: 'Jebel Ali', etd: day(-10), eta: day(-1), pieces: 320, weight_kg: 21500, cargo_value: 175000, ops_owner_id: uid.operations, free_days_end: new Date(Date.now() + 18 * 3_600_000).toISOString() });
     await ops.patch(`/shipments/${sh4}`, { carrier: 'MSC', etd: day(6), eta: day(24), pieces: 900, weight_kg: 7600, volume_cbm: 18, ops_owner_id: uid.operations });
     const step = async (id: string, ...statuses: string[]) => { for (const s of statuses) await ops.post(`/shipments/${id}/status`, { status: s }); };
-    await step(sh1, 'confirmed', 'in_transit', 'arrived', 'customs');
-    await step(sh2, 'confirmed', 'in_transit');
-    await step(sh3, 'confirmed', 'in_transit', 'arrived', 'customs');
-    await step(sh4, 'confirmed');
+    const confirm = (id: string) => ops.post(`/shipments/${id}/confirm-booking`, {});
+    // sh4 is a future sailing: tie it to a vessel we hold space on so the Modal Hub can count its TEU
+    await ops.patch(`/shipments/${sh4}`, { vessel: 'MSC ORCHESTRA', voyage: '2618E' });
+    await confirm(sh1); await step(sh1, 'in_transit', 'arrived', 'customs');
+    await confirm(sh2); await step(sh2, 'in_transit');
+    await confirm(sh3); await step(sh3, 'in_transit', 'arrived', 'customs');
+    await confirm(sh4);
 
     // customs: sh1 clears; sh3 held (missing CoO)
     const d1 = (await customs.get(`/customs?shipment_id=${sh1}`)).data[0];
@@ -296,6 +299,101 @@ export async function seedDemo(opts: { reset?: boolean; skipMigrate?: boolean } 
     for (const [title, cat, level, hrs] of [['UAE VAT for freight forwarders', 'Compliance', 'intermediate', 3], ['Incoterms 2020 in practice', 'Operations', 'beginner', 2], ['Customs HS classification', 'Customs', 'advanced', 4]] as const) await hr.post('/courses', { title, category: cat, level, duration_hrs: hrs, certificate: true, description: `${title} — practical course for forwarders` });
     await hr.post('/talent', { name: 'Reem Al Suwaidi', headline: 'Customs clearance specialist · 9 yrs', skills: ['HS classification', 'Dubai Trade', 'Mirsal 2'], verified: true, rating: 4.9, rate_per_day: 900, availability: 'available' });
     await hr.post('/talent', { name: 'Vikram Nair', headline: 'Freight rate analyst · Asia–ME lanes', skills: ['Rate management', 'Excel', 'Carrier negotiation'], verified: true, rating: 4.7, rate_per_day: 750, availability: 'busy' });
+
+
+    // ── fleet register depth, equipment, carrier capacity, branch notes ──
+    const vehs = (await dispatch.get('/vehicles')).data as any[];
+    const byPlate = (p: string) => vehs.find((v) => v.plate === p)?.id as string;
+    await dispatch.patch(`/vehicles/${byPlate('DXB K 48213')}`, { make_model: 'Volvo FH16 750', year: 2022, emirate: 'Dubai', odometer_km: 88450, next_service_km: 90000, fuel_pct: 78, salik_balance: 450, civil_defense_permit: true, current_location: 'Jebel Ali Port, Gate 4', status: 'on_trip' });
+    await dispatch.patch(`/vehicles/${byPlate('DXB M 90177')}`, { make_model: 'Isuzu FVR 10T', year: 2021, emirate: 'Dubai', odometer_km: 45200, next_service_km: 50000, fuel_pct: 90, salik_balance: 380, civil_defense_permit: true, current_location: 'Dubai South yard' });
+    for (const v of [
+      { plate: 'AUH 19204', type: 'Prime mover + trailer', capacity_kg: 30000, make_model: 'Mercedes Actros 1845', year: 2021, emirate: 'Abu Dhabi', odometer_km: 142100, next_service_km: 150000, fuel_pct: 62, salik_balance: 620, civil_defense_permit: true, current_location: 'Khalifa Port gate', status: 'at_gate', mulkiya_expiry: day(300), insurance_expiry: day(300) },
+      { plate: 'SHJ 33019', type: 'Flatbed 50T', capacity_kg: 50000, make_model: 'MAN TGX 26.480', year: 2019, emirate: 'Sharjah', odometer_km: 301500, next_service_km: 303100, fuel_pct: 35, salik_balance: 190, civil_defense_permit: false, current_location: 'Sharjah workshop', status: 'maintenance', mulkiya_expiry: day(30), insurance_expiry: day(30) },
+      { plate: 'DXB 55021', type: '3-ton pickup', capacity_kg: 3000, make_model: 'Toyota Hilux', year: 2023, emirate: 'Dubai', odometer_km: 18900, next_service_km: 25000, fuel_pct: 84, salik_balance: 240, civil_defense_permit: false, current_location: 'Al Quoz', status: 'on_trip', mulkiya_expiry: day(400), insurance_expiry: day(400) },
+    ]) await dispatch.post('/vehicles', v);
+    for (const e of [
+      { code: 'CH-4001', category: 'road_chassis', type: "40' skeletal container chassis", specs: '3-axle, twist locks', tare_kg: 4200, max_payload_kg: 38000, location: 'JAFZA Gate 4 yard', status: 'attached', assigned_to: 'DXB K 48213', last_inspection: day(-40) },
+      { code: 'CH-2002', category: 'road_chassis', type: "20' skeletal container chassis", tare_kg: 2900, max_payload_kg: 28000, location: 'DIC staging yard', status: 'operational', last_inspection: day(-25) },
+      { code: 'GS-3000', category: 'reefer_genset', type: 'Diesel under-mount genset SG-3000', specs: 'Clip-on 460V', tare_kg: 0, max_payload_kg: 0, location: 'Dubai South cold hub', status: 'attached', assigned_to: 'DXB M 90177', last_inspection: day(-10) },
+      { code: 'CT-9001', category: 'sea_container', type: "40' high cube ISO container (SOC)", tare_kg: 3900, max_payload_kg: 28500, location: 'Jebel Ali T2', status: 'operational', last_inspection: day(-60) },
+      { code: 'ULD-PMC-01', category: 'air_uld', type: 'PMC pallet 96x125 in', tare_kg: 120, max_payload_kg: 6800, location: 'DWC cargo terminal', status: 'depot', last_inspection: day(-15) },
+    ]) await dispatch.post('/equipment', e);
+
+    const inH = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+    for (const a of [
+      { mode: 'sea', carrier: 'MSC', vessel: 'MSC ORCHESTRA', voyage: '2618E', route: 'Shanghai → Jebel Ali', cutoff_at: inH(26), allocated: 60, other_booked: 44, unit: 'TEU' },
+      { mode: 'sea', carrier: 'CMA CGM', vessel: 'CMA CGM LA TRAVIATA', voyage: '088W', route: 'Jebel Ali → Mombasa', cutoff_at: inH(54), allocated: 40, other_booked: 41, unit: 'TEU' },
+      { mode: 'sea', carrier: 'Maersk', vessel: 'MAERSK SENTOSA', voyage: '2612E', route: 'Nhava Sheva → Jebel Ali', cutoff_at: inH(76), allocated: 80, other_booked: 71, unit: 'TEU' },
+      { mode: 'sea', carrier: 'Ocean Network Express', vessel: 'ONE COMMITMENT', voyage: '054E', route: 'Jebel Ali → Nhava Sheva', cutoff_at: inH(120), allocated: 100, other_booked: 38, unit: 'TEU' },
+      { mode: 'air', carrier: 'Emirates SkyCargo', voyage: 'EK 047', route: 'DXB → FRA', cutoff_at: inH(5.7), allocated: 18000, other_booked: 12650, unit: 'kg' },
+      { mode: 'air', carrier: 'Emirates SkyCargo', voyage: 'EK 073', route: 'DXB → LHR', cutoff_at: inH(9), allocated: 15000, other_booked: 14200, unit: 'kg' },
+      { mode: 'air', carrier: 'Etihad Cargo', voyage: 'EY 0912', route: 'AUH → CDG', cutoff_at: inH(27), allocated: 12000, other_booked: 4300, unit: 'kg' },
+      { mode: 'air', carrier: 'Emirates SkyCargo', voyage: 'EK 9821', route: 'DXB → JFK', cutoff_at: inH(33), allocated: 20000, other_booked: 8000, unit: 'kg' },
+    ]) await ops.post('/capacity-allocations', a);
+    for (const [i, p] of ([
+      ['sea', 'equipment', '20GP', "20' General Purpose", 120, 96, 4, 'units'], ['sea', 'equipment', '40GP', "40' General Purpose", 80, 61, 3, 'units'], ['sea', 'equipment', '40HC', "40' High Cube", 140, 129, 5, 'units'],
+      ['sea', 'equipment', '40RF', "40' Reefer", 36, 33, 2, 'units'], ['sea', 'yard', 'YARD', 'JAFZA depot yard', 900, 742, 0, 'TEU'],
+      ['air', 'equipment', 'PMC', 'PMC pallets (96×125")', 40, 28, 1, 'units'], ['air', 'equipment', 'AKE', 'AKE containers', 90, 71, 3, 'units'], ['air', 'equipment', 'AAP', 'AAP / PLA pallets', 24, 9, 0, 'units'],
+      ['air', 'cold_chain', 'COLD', '2–8 °C build-up positions', 24, 20, 0, 'positions'],
+    ] as const).entries()) await ops.post('/equipment-pools', { mode: p[0], kind: p[1], code: p[2], label: p[3], total: p[4], in_use: p[5], damaged: p[6], unit: p[7], sort: i });
+
+    // live jobs that consume carrier space (so the Modal Hub shows them against the allotments)
+    const bookDirect = async (customer: string, mode: string, body: Record<string, any>, confirmBody: Record<string, any>) => {
+      const id = (await ops.post('/shipments', { customer_id: C[customer], mode, ...body })).id as string;
+      await ops.post(`/shipments/${id}/confirm-booking`, confirmBody);
+      return id;
+    };
+    await bookDirect('aramex', 'air', { origin: 'Dubai (DXB)', destination: 'Frankfurt (FRA)', cargo_description: 'Pharmaceutical cold-chain, 6 pallets', weight_kg: 480, volume_cbm: 1, incoterm: 'CPT', cargo_value: 320000 }, { carrier: 'Emirates SkyCargo', voyage: 'EK 047', awb_number: '176-48219903' });
+    await bookDirect('noon', 'air', { origin: 'Dubai (DXB)', destination: 'London (LHR)', cargo_description: 'Consumer electronics, 20 cartons', weight_kg: 2000, volume_cbm: 4, incoterm: 'DAP', cargo_value: 180000 }, { carrier: 'Emirates SkyCargo', voyage: 'EK 073', awb_number: '176-48219914' });
+    await bookDirect('lulu', 'sea_lcl', { origin: 'Jebel Ali', destination: 'Mombasa', cargo_description: 'Household goods', weight_kg: 5200, volume_cbm: 16, incoterm: 'CFR', cargo_value: 42000 }, { carrier: 'CMA CGM', vessel: 'CMA CGM LA TRAVIATA', voyage: '088W' });
+    await bookDirect('futtaim', 'sea_fcl', { origin: 'Nhava Sheva', destination: 'Jebel Ali', cargo_description: 'Auto parts', weight_kg: 18000, container_type: '40HC', containers: 2, incoterm: 'CIF', cargo_value: 96000 }, { carrier: 'Maersk', vessel: 'MAERSK SENTOSA', voyage: '2612E', container_no: containerNo('MAEU', 601122), bl_number: 'MAEU330012345' });
+    await bookDirect('emsteel', 'road', { origin: 'Jebel Ali', destination: 'Abu Dhabi', cargo_description: 'Steel sections', weight_kg: 24000, incoterm: 'DAP', cargo_value: 88000 }, { carrier: 'Rapid Haulage LLC' });
+
+    await owner_.post('/notes', { body: 'Customs amendment for the held Maersk job submitted at JAFZA Gate 4 counter. Broker is waiting with the physical seal.', priority: 'urgent' });
+    await ops.post('/notes', { body: 'Terminal crane maintenance expected tonight 22:00–02:00. Please schedule container gate-ins before 21:30.', priority: 'normal' });
+    await fin.post('/notes', { body: 'Gulf Retail promised payment before Thursday to restore full credit line.', priority: 'info' });
+
+    // ── history for the Operational Velocity report: quote → job → booking confirmed → documents generated ──
+    // Real orders go through the real endpoints; only the *clock* is moved back afterwards, per mode, so the report has weeks of data.
+    const walkin = (await sales.post('/customers', { name: 'Walk-in Trader LLC', type: 'shipper', email: 'walkin@example.ae', city: 'Dubai', country: 'AE' })).id as string; // no TRN on file
+    let seed = 20260929;
+    const rnd = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const between = (lo: number, hi: number) => lo + rnd() * (hi - lo);
+    const profiles = [
+      { mode: 'sea_fcl', n: 9, job: [3, 7], carrier: [22, 46], doc: [0.4, 0.9], lanes: [['Shanghai', 'Jebel Ali'], ['Jebel Ali', 'Mumbai'], ['Ningbo', 'Jebel Ali']], confirm: { carrier: 'MSC', vessel: 'MSC ORCHESTRA', voyage: '2610W', container_type: '40HC', containers: 1 } },
+      { mode: 'sea_lcl', n: 4, job: [3, 7], carrier: [26, 44], doc: [0.4, 0.9], lanes: [['Jebel Ali', 'Mombasa'], ['Colombo', 'Jebel Ali']], confirm: { carrier: 'CMA CGM', vessel: 'CMA CGM LA TRAVIATA', voyage: '087W' } },
+      { mode: 'air', n: 9, job: [3, 6], carrier: [6, 15], doc: [0.3, 0.8], lanes: [['Dubai (DXB)', 'Frankfurt (FRA)'], ['Dubai (DXB)', 'London (LHR)'], ['Abu Dhabi (AUH)', 'Paris (CDG)']], confirm: { carrier: 'Emirates SkyCargo', voyage: 'EK 9800' } },
+      { mode: 'road', n: 10, job: [3, 6], carrier: [12, 24], doc: [0.4, 0.9], lanes: [['Jebel Ali', 'Al Ain'], ['Dubai', 'Riyadh'], ['Sharjah', 'Muscat']], confirm: { carrier: 'Rapid Haulage LLC' } },
+    ] as const;
+    const custKeys = ['noon', 'aramex', 'futtaim', 'emsteel', 'lulu', 'danube'];
+    let k = 0;
+    for (const p of profiles) {
+      for (let i = 0; i < p.n; i++, k++) {
+        const useWalkin = rnd() < 0.15;
+        const cid = useWalkin ? walkin : C[custKeys[k % custKeys.length]];
+        const [o, d] = p.lanes[i % p.lanes.length];
+        const q = await sales.post('/quotes', { customer_id: cid, mode: p.mode, origin: o, destination: d, cargo_description: 'Historical order', containers: p.mode === 'sea_fcl' ? '1x40HC' : undefined,
+          items: [{ charge_type: 'freight', description: `Freight ${o} → ${d}`, quantity: 1, unit_price: Math.round(between(1500, 9000)) }] });
+        const sub = await sales.post(`/quotes/${q.id}/submit`);
+        if (sub.status === 'pending_approval') await owner_.post(`/approvals/${sub.approval.id}/decide`, { approve: true });
+        await sales.post(`/quotes/${q.id}/send`);
+        const shId = (await sales.post(`/quotes/${q.id}/accept`)).shipment_id as string;
+        await ops.post(`/shipments/${shId}/confirm-booking`, p.confirm);
+        // move the clock: accepted → job created → booking confirmed → documents generated
+        const jobMin = between(p.job[0], p.job[1]) + (useWalkin ? between(8, 15) : 0);
+        const carrierMin = between(p.carrier[0], p.carrier[1]);
+        const docMin = between(p.doc[0], p.doc[1]);
+        const total = jobMin + carrierMin + docMin;
+        const agoMin = (i + 1) * ((14 * 24 * 60) / p.n) * (0.55 + rnd() * 0.4) + total + 20;
+        const t0 = Date.now() - agoMin * 60_000;
+        const created = t0 + jobMin * 60_000, confirmed = created + carrierMin * 60_000, docs = confirmed + docMin * 60_000;
+        const at = (ms: number) => new Date(ms).toISOString();
+        await query(`UPDATE quotes SET accepted_at=$2, sent_at=$3 WHERE id=$1`, [q.id, at(t0), at(t0 - 3_600_000)]);
+        await query(`UPDATE shipments SET created_at=$2, status='closed', delivered_at=$3 WHERE id=$1`, [shId, at(created), at(docs + 86_400_000)]);
+        await query(`UPDATE milestones SET status='done', done_at = CASE WHEN code='booking' THEN $2::timestamptz ELSE $3::timestamptz END WHERE shipment_id=$1`, [shId, at(confirmed), at(docs + 3_600_000)]);
+        await query(`UPDATE documents SET generated_at=$2::timestamptz + (random()*5) * interval '1 second', created_at=$2 WHERE shipment_id=$1 AND origin='generated'`, [shId, at(docs)]);
+      }
+    }
 
     await ops.post('/shipments/refresh-risk');
     logger.info({ tenant: tenant.slug }, 'demo data seeded');

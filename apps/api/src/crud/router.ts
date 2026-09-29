@@ -12,10 +12,15 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
 
 /** Strip cost-sensitive fields unless the user holds costs:r */
 export function stripSensitive<T extends Record<string, any>>(r: Resource, req: Request, row: T): T {
-  if (!r.sensitive?.length || can(req, 'costs', 'r')) return row;
-  const copy: any = { ...row };
+  let out: T = row;
+  if (r.hidden?.length) {
+    out = { ...row };
+    for (const k of r.hidden) delete out[k];
+  }
+  if (!r.sensitive?.length || can(req, 'costs', 'r')) return out;
+  const copy: Record<string, any> = { ...out };
   for (const k of r.sensitive) delete copy[k];
-  return copy;
+  return copy as T;
 }
 
 export function buildListQuery(r: Resource, req: Request) {

@@ -27,6 +27,7 @@ import { inboxRouter, webhooksRouter } from './routes/inbox';
 import { dashboardRouter, aiRouter, reportsRouter, searchRouter, notificationsRouter } from './routes/intel';
 import { portalRouter, publicRouter } from './routes/portal';
 import { adminRouter, lookupRouter } from './routes/admin';
+import { insightRouter, notesRouter } from './routes/insight';
 
 /** Custom routers that must be mounted BEFORE the generic CRUD router on the same base path. */
 const custom: Record<string, express.Router[]> = {
@@ -83,6 +84,8 @@ export function createApp() {
   api.use('/portal', portalRouter);
   api.use('/admin', adminRouter);
   api.use('/lookup', lookupRouter);
+  api.use('/insight', insightRouter);
+  api.use('/notes', notesRouter);
   api.use('/quotes', quotesRouter);
   api.use('/accounting', accountingRouter);
   api.use('/dispatch', dispatchRouter);

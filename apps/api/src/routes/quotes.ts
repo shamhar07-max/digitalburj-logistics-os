@@ -10,6 +10,7 @@ import { requestApproval } from '../services/approvals';
 import { publish } from '../services/events';
 import { getSettings } from '../services/settings';
 import { chargesFromQuote, createShipment } from '../services/shipments';
+import { parseContainerSpec } from '@digitalburj/shared';
 import { notifyPermitted } from '../services/notify';
 
 export const quotesRouter = Router();
@@ -261,6 +262,7 @@ quotesRouter.post(
       const s = await createShipment(db, t, req.user!.id, {
         customer_id: q.customer_id, quote_id: q.id, mode: q.mode, origin: q.origin, destination: q.destination, incoterm: q.incoterm, cargo_description: q.cargo_description,
         weight_kg: q.weight_kg, volume_cbm: q.volume_cbm, entity_id: q.entity_id,
+        ...(parseContainerSpec(q.containers) ?? {}),
       });
       await chargesFromQuote(db, t, s.id, q.id);
       const row = (await db.query(`UPDATE quotes SET status='accepted', accepted_at=now(), accepted_by=$2, shipment_id=$3 WHERE id=$1 RETURNING *`, [q.id, req.user!.name, s.id])).rows[0];

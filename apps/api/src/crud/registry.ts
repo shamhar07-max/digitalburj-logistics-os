@@ -104,7 +104,7 @@ export const resources: Resource[] = [
     table: 'shipments',
     module: 'shipments',
     cols: [
-      uuid('customer_id'), uuid('consignee_id'), t('carrier'), t('vessel'), t('voyage'), t('pol'), t('pod'), t('bl_number'), t('awb_number'), t('container_no'), t('container_type'),
+      uuid('customer_id'), uuid('consignee_id'), t('carrier'), t('vessel'), t('voyage'), t('pol'), t('pod'), t('bl_number'), t('awb_number'), t('container_no'), t('container_type'), int('containers', { min: 0, max: 999 }),
       t('incoterm'), t('cargo_description'), t('hs_code'), int('pieces', { min: 0 }), num('weight_kg', { min: 0 }), num('volume_cbm', { min: 0 }), num('cargo_value', { min: 0 }),
       date('etd'), date('eta'), date('atd'), date('ata'), ts('free_days_end'), t('priority', { enum: ['low', 'normal', 'high', 'urgent'] }), uuid('ops_owner_id'),
       { n: 'status', t: 'text', ro: true }, { n: 'mode', t: 'text', ro: true }, { n: 'number', t: 'text', ro: true },
@@ -126,8 +126,9 @@ export const resources: Resource[] = [
     table: 'documents',
     module: 'documents',
     cols: [uuid('shipment_id'), uuid('customer_id'), t('type'), t('name', { req: true }), bool('is_public')],
-    filters: ['shipment_id', 'customer_id', 'type', 'is_public'],
-    search: ['name', 'type'],
+    filters: ['shipment_id', 'customer_id', 'type', 'is_public', 'origin'],
+    hidden: ['body_html', 'generated_data'],
+    search: ['name', 'type', 'doc_no'],
     sort: 't.created_at DESC',
     disable: ['create'], // uploads handled by routes/documents.ts
     select: `(SELECT number FROM shipments s WHERE s.id=t.shipment_id) AS shipment_number`,
@@ -163,7 +164,8 @@ export const resources: Resource[] = [
     key: 'vehicles',
     table: 'vehicles',
     module: 'drivers',
-    cols: [t('plate', { req: true }), t('type'), int('capacity_kg', { min: 0 }), date('mulkiya_expiry'), date('insurance_expiry'), t('gps_device'), t('status', { enum: ['available', 'on_trip', 'maintenance', 'retired'] })],
+    cols: [t('plate', { req: true }), t('type'), int('capacity_kg', { min: 0 }), date('mulkiya_expiry'), date('insurance_expiry'), t('gps_device'), t('status', { enum: ['available', 'on_trip', 'at_gate', 'maintenance', 'retired'] }),
+      t('make_model', { max: 120 }), int('year', { min: 1990, max: 2100 }), t('emirate', { max: 40 }), int('odometer_km', { min: 0 }), int('next_service_km', { min: 0 }), int('fuel_pct', { min: 0, max: 100 }), num('salik_balance', { min: 0 }), bool('civil_defense_permit'), t('current_location', { max: 200 })],
     search: ['plate', 'type'],
     filters: ['status', 'type'],
     sort: 't.plate ASC',
@@ -476,6 +478,45 @@ export const resources: Resource[] = [
     filters: ['metric'],
     sort: 't.period DESC, t.created_at DESC',
     dateCol: 'period',
+  },
+  // ── Fleet equipment, carrier capacity and pools (Modal Hub inputs) ──
+  {
+    key: 'equipment',
+    table: 'equipment',
+    module: 'dispatch',
+    cols: [
+      t('code', { req: true, max: 40 }),
+      t('category', { req: true, enum: ['road_chassis', 'reefer_genset', 'sea_container', 'air_uld'] }),
+      t('type', { req: true, max: 160 }), t('specs'), int('tare_kg', { min: 0 }), int('max_payload_kg', { min: 0 }), t('location', { max: 200 }),
+      t('status', { enum: ['operational', 'attached', 'maintenance', 'depot'] }), t('assigned_to', { max: 200 }), date('last_inspection'),
+    ],
+    filters: ['category', 'status'],
+    search: ['code', 'type', 'location'],
+    sort: 't.category, t.code',
+  },
+  {
+    key: 'capacity-allocations',
+    table: 'capacity_allocations',
+    module: 'shipments',
+    cols: [
+      t('mode', { req: true, enum: ['sea', 'air'] }), t('carrier', { req: true, max: 120 }), t('vessel', { max: 120 }), t('voyage', { req: true, max: 40 }), t('route', { max: 160 }),
+      ts('cutoff_at', { req: true }), num('allocated', { req: true, min: 0 }), num('other_booked', { min: 0 }), t('unit', { req: true, enum: ['TEU', 'kg'] }), t('notes'),
+    ],
+    filters: ['mode', 'unit'],
+    search: ['carrier', 'vessel', 'voyage', 'route'],
+    sort: 't.cutoff_at ASC',
+  },
+  {
+    key: 'equipment-pools',
+    table: 'equipment_pools',
+    module: 'shipments',
+    cols: [
+      t('mode', { req: true, enum: ['sea', 'air'] }), t('kind', { enum: ['equipment', 'yard', 'cold_chain'] }), t('code', { req: true, max: 40 }), t('label', { req: true, max: 160 }),
+      int('total', { req: true, min: 0 }), int('in_use', { min: 0 }), int('damaged', { min: 0 }), t('unit', { max: 20 }), int('sort'),
+    ],
+    filters: ['mode', 'kind'],
+    search: ['code', 'label'],
+    sort: 't.mode, t.sort, t.code',
   },
 ];
 

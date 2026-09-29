@@ -7,6 +7,8 @@ export interface TenantSettings {
   expense_approval_threshold: number;
   invoice_terms_days: number;
   ai_enabled: boolean;
+  /** generate the mode-specific document set as soon as a booking is confirmed */
+  auto_generate_docs: boolean;
   [k: string]: any;
 }
 
@@ -17,6 +19,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   expense_approval_threshold: 500,
   invoice_terms_days: 30,
   ai_enabled: true,
+  auto_generate_docs: true,
 };
 
 export async function getSettings(db: Db, tenantId: string): Promise<TenantSettings> {

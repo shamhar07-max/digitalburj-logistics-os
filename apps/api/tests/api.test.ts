@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { one, pool, query } from '../src/db';
 import { DEMO_PASSWORD, seedDemo } from '../src/seed';
+import { buildHub, compareModes, measure, type HubInput, type VelocityRecord } from '@digitalburj/shared';
 
 const app = createApp();
 const T: Record<string, string> = {};
@@ -486,3 +487,233 @@ describe('gate 13 · documents & AI document intelligence', () => {
   });
 });
 
+
+
+// ─────────────────────────── merged features ───────────────────────────
+const customerId = async (search: string) => (await api('get', `/customers?search=${encodeURIComponent(search)}`, 'owner')).body.data[0].id as string;
+
+describe('gate 14 · confirm booking & document generation', () => {
+  let air: { id: string; number: string };
+  it('confirming a booking records the details, moves booked → confirmed and generates the mode-specific set', async () => {
+    const created = (await api('post', '/shipments', 'ops').send({ customer_id: await customerId('Aramex'), mode: 'air', origin: 'Dubai (DXB)', destination: 'Frankfurt (FRA)', cargo_description: 'Test <script>alert(1)</script> cargo', weight_kg: 300, volume_cbm: 2, cargo_value: 5000 })).body;
+    air = created;
+    expect(created.status).toBe('booked');
+    const before = (await api('get', `/shipments/${created.id}/detail`, 'ops')).body.milestones.find((m: any) => m.code === 'booking');
+    expect(before.status).toBe('pending'); // no longer pre-completed at creation
+    const r = await api('post', `/shipments/${created.id}/confirm-booking`, 'ops').send({ carrier: 'Emirates SkyCargo', voyage: 'EK 047', awb_number: '176-00000001' });
+    expect(r.status).toBe(200);
+    expect(r.body.shipment.status).toBe('confirmed');
+    expect(r.body.documents.map((d: any) => d.type).sort()).toEqual(['AWB', 'COMMERCIAL_INVOICE', 'PACKING_LIST']);
+    expect(r.body.documents.every((d: any) => d.version === 1)).toBe(true);
+    expect(r.body.documents.find((d: any) => d.type === 'AWB').doc_no).toMatch(/^HAWB-\d{5}$/);
+    const after = (await api('get', `/shipments/${created.id}/detail`, 'ops')).body;
+    const booking = after.milestones.find((m: any) => m.code === 'booking');
+    expect(booking.status).toBe('done'); expect(booking.done_at).toBeTruthy();
+    expect(after.documents.filter((d: any) => d.origin === 'generated')).toHaveLength(3);
+  });
+  it('booking can only be confirmed once', async () => {
+    expect((await api('post', `/shipments/${air.id}/confirm-booking`, 'ops').send({})).status).toBe(400);
+  });
+  it('sales (read-only on shipments) and portal users cannot confirm or generate', async () => {
+    expect((await api('post', `/shipments/${air.id}/confirm-booking`, 'sales').send({})).status).toBe(403);
+    expect((await api('post', `/shipments/${air.id}/generate-documents`, 'customer').send({})).status).toBe(403);
+  });
+  it('regenerating adds a new version under the same document number', async () => {
+    const first = (await api('get', `/shipments/${air.id}/detail`, 'ops')).body.documents.filter((d: any) => d.type === 'AWB');
+    const r = await api('post', `/shipments/${air.id}/generate-documents`, 'ops').send({ types: ['AWB'] });
+    expect(r.status).toBe(201);
+    expect(r.body.documents).toHaveLength(1);
+    expect(r.body.documents[0].version).toBe(2);
+    expect(r.body.documents[0].doc_no).toBe(first[0].doc_no);
+    // a type that does not belong to the mode is ignored, never generated
+    const bl = await api('post', `/shipments/${air.id}/generate-documents`, 'ops').send({ types: ['BL'] });
+    expect(bl.body.documents).toHaveLength(0);
+  });
+  it('renders a print-ready HTML document, escapes customer text, and flags incomplete data as a draft', async () => {
+    const doc = (await api('get', `/shipments/${air.id}/detail`, 'ops')).body.documents.find((d: any) => d.type === 'COMMERCIAL_INVOICE');
+    const r = await api('get', `/documents/${doc.id}/render`, 'ops');
+    expect(r.status).toBe(200);
+    expect(r.headers['content-type']).toContain('text/html');
+    expect(r.headers['content-security-policy']).toContain("default-src 'none'");
+    expect(r.text).toContain('COMMERCIAL INVOICE');
+    expect(r.text).not.toContain('<script>alert(1)</script>');
+    expect(r.text).toContain('&lt;script&gt;');
+    expect(r.text).toMatch(/sha256:[0-9a-f]{32}/);
+    const awb = (await api('get', `/shipments/${air.id}/detail`, 'ops')).body.documents.find((d: any) => d.type === 'AWB');
+    expect((await api('get', `/documents/${awb.id}/render`, 'ops')).text).toContain('House Air Waybill'.toUpperCase());
+  });
+  it('generated bodies never leak through the generic documents list', async () => {
+    const list = (await api('get', `/documents?shipment_id=${air.id}&origin=generated`, 'ops')).body;
+    expect(list.total).toBe(4);
+    expect(list.data.every((d: any) => d.body_html === undefined && d.generated_data === undefined)).toBe(true);
+  });
+  it('generated documents are internal until shared, and other tenants cannot render them', async () => {
+    const doc = (await api('get', `/documents?shipment_id=${air.id}&origin=generated`, 'ops')).body.data[0];
+    expect((await api('get', `/documents/${doc.id}/render`, 'customer')).status).toBe(404);
+    const reg = await request(app).post('/api/auth/register').send({ companyName: 'Doc Rival LLC', name: 'Rita Rival', email: 'rita@docrival-demo.ae', password: 'Sup3r-Secret-Pass!' });
+    expect((await request(app).get(`/api/documents/${doc.id}/render`).set('Authorization', 'Bearer ' + reg.body.accessToken)).status).toBe(404);
+  });
+  it('the tenant can switch off automatic generation and confirmation then produces no documents', async () => {
+    await api('patch', '/admin/settings', 'owner').send({ settings: { auto_generate_docs: false } }).expect(200);
+    const s = (await api('post', '/shipments', 'ops').send({ customer_id: await customerId('Danube'), mode: 'road', origin: 'Jebel Ali', destination: 'Al Ain' })).body;
+    const r = await api('post', `/shipments/${s.id}/confirm-booking`, 'ops').send({});
+    expect(r.body.documents).toEqual([]);
+    const manual = await api('post', `/shipments/${s.id}/generate-documents`, 'ops').send({});
+    expect(manual.body.documents.map((d: any) => d.type).sort()).toEqual(['CMR', 'COMMERCIAL_INVOICE', 'PACKING_LIST']);
+    await api('patch', '/admin/settings', 'owner').send({ settings: { auto_generate_docs: true } }).expect(200);
+  });
+});
+
+describe('gate 15 · operational velocity by mode', () => {
+  let records: VelocityRecord[];
+  it('returns one record per measurable order with ordered timestamps, and says how many are still pending', async () => {
+    const r = await api('get', '/insight/velocity?days=90', 'owner');
+    expect(r.status).toBe(200);
+    records = r.body.records;
+    expect(records.length).toBeGreaterThanOrEqual(30);
+    expect(r.body.coverage.measured).toBe(records.length);
+    expect(r.body.coverage.pending).toBeGreaterThanOrEqual(1); // e.g. the accepted quote whose booking is not yet confirmed
+    const m = measure(records);
+    expect(m.rejected).toHaveLength(0);
+  });
+  it('shows the modes behaving differently: Sea is the slowest and its bottleneck is carrier booking', () => {
+    const c = compareModes(measure(records).valid);
+    expect(c.byMode.Sea.n).toBeGreaterThan(0); expect(c.byMode.Air.n).toBeGreaterThan(0); expect(c.byMode.Road.n).toBeGreaterThan(0);
+    expect(c.byMode.Sea.avg).toBeGreaterThan(c.byMode.Road.avg);
+    expect(c.byMode.Road.avg).toBeGreaterThan(c.byMode.Air.avg);
+    expect(c.byMode.Sea.bottleneck.stage).toBe('carrierBooking');
+    expect(c.slowestByStage.carrierBooking).toBe('Sea');
+  });
+  it('a customer with no TRN on file is flagged as a hold reason', () => {
+    const held = records.filter((r) => r.holdReason === 'missing_trn');
+    expect(held.length).toBeGreaterThan(0);
+    expect(held.every((r) => r.customer.startsWith('Walk-in'))).toBe(true);
+  });
+  it('a newly accepted quote only appears once its booking is confirmed and documents exist', async () => {
+    const cust = await customerId('Noon');
+    const q = (await api('post', '/quotes', 'sales').send({ customer_id: cust, mode: 'road', origin: 'Jebel Ali', destination: 'Dubai', items: [{ charge_type: 'trucking', description: 'Haulage', quantity: 1, unit_price: 800 }] })).body;
+    const sub = (await api('post', `/quotes/${q.id}/submit`, 'sales').send({})).body;
+    if (sub.status === 'pending_approval') await api('post', `/approvals/${sub.approval.id}/decide`, 'owner').send({ approve: true });
+    await api('post', `/quotes/${q.id}/send`, 'sales').send({}).expect(200);
+    const shId = (await api('post', `/quotes/${q.id}/accept`, 'sales').send({})).body.shipment_id;
+    const listed = async () => (await api('get', '/insight/velocity?days=1', 'owner')).body.records.map((r: any) => r.shipmentId);
+    expect(await listed()).not.toContain(shId);
+    await api('post', `/shipments/${shId}/confirm-booking`, 'ops').send({ carrier: 'Rapid Haulage LLC' }).expect(200);
+    const rec = (await api('get', '/insight/velocity?days=1', 'owner')).body.records.find((r: any) => r.shipmentId === shId);
+    expect(rec).toBeTruthy();
+    expect(measure([rec]).valid).toHaveLength(1);
+  });
+  it('is available to finance but not to portal roles', async () => {
+    expect((await api('get', '/insight/velocity', 'finance')).status).toBe(200);
+    expect((await api('get', '/insight/velocity', 'customer')).status).toBe(403);
+    expect((await api('get', '/insight/velocity', 'driver')).status).toBe(403);
+  });
+});
+
+describe('gate 16 · modal hub', () => {
+  let input: HubInput;
+  let now: number;
+  it('returns raw lane inputs with no cost fields', async () => {
+    const r = await api('get', '/insight/modal-hub', 'ops');
+    expect(r.status).toBe(200);
+    input = r.body.input; now = r.body.now;
+    expect(input.vehicles).toHaveLength(5); expect(input.equipment.length).toBeGreaterThanOrEqual(5); expect(input.allocations).toHaveLength(8); expect(input.pools).toHaveLength(9);
+    const keys = Object.keys(input.shipments[0]);
+    expect(keys).not.toContain('revenue'); expect(keys).not.toContain('cost'); expect(keys).not.toContain('margin_pct'); expect(keys).not.toContain('cargo_value');
+  });
+  it('sea: live TEU (LCL by volume) from confirmed jobs is added to the sailing they are booked on', () => {
+    const hub = buildHub(input, now);
+    const bar = hub.lanes.Sea.sections[0].bars.find((b) => b.label.startsWith('MSC ORCHESTRA'))!;
+    expect(bar.used).toBe(44.5); // 44 held by others + the LCL job's 18 CBM ≈ 0.5 TEU (LCL is counted by volume, not containers)
+    const traviata = hub.lanes.Sea.sections[0].bars.find((b) => b.label.startsWith('CMA CGM LA TRAVIATA'))!;
+    expect(traviata.pct).toBeGreaterThan(100); expect(traviata.tone).toBe('risk'); // 41 held + 16 CBM LCL job
+  });
+  it('air: uplift includes live chargeable kg and flags the over-allotment', () => {
+    const hub = buildHub(input, now);
+    const ek047 = hub.lanes.Air.sections[0].bars.find((b) => b.label.startsWith('EK 047'))!;
+    expect(ek047.used).toBeGreaterThan(12650);
+    const ek073 = hub.lanes.Air.sections[0].bars.find((b) => b.label.startsWith('EK 073'))!;
+    expect(ek073.pct).toBeGreaterThan(100);
+    expect(hub.lanes.Air.alerts.some((a) => a.tone === 'risk' && a.text.includes('Over allotment'))).toBe(true);
+  });
+  it('road: fleet utilisation and per-vehicle alerts come from the register', () => {
+    const road = buildHub(input, now).lanes.Road;
+    expect(road.headline.value).toBe('75%'); // 3 working of 4 in service (1 in maintenance)
+    expect(road.vehicles).toHaveLength(5);
+    expect(road.alerts.some((a) => a.text.includes('SHJ 33019'))).toBe(true);
+    expect(road.alerts.some((a) => a.text.includes('DXB M 90177') && a.text.includes('Mulkiya'))).toBe(true);
+  });
+  it('users without dispatch access get job lanes but no fleet data; portal roles are refused', async () => {
+    const r = await api('get', '/insight/modal-hub', 'finance');
+    if (r.status === 200) expect(r.body.input.vehicles).toEqual([]);
+    expect((await api('get', '/insight/modal-hub', 'customer')).status).toBe(403);
+    expect((await api('get', '/insight/modal-hub', 'driver')).status).toBe(403);
+  });
+  it('a booking made now shows up in the lane on the next read', async () => {
+    const before = buildHub(((await api('get', '/insight/modal-hub', 'ops')).body as any).input, Date.now()).lanes.Air.metrics[0].value;
+    const s = (await api('post', '/shipments', 'ops').send({ customer_id: await customerId('Aramex'), mode: 'air', origin: 'Dubai (DXB)', destination: 'Paris (CDG)', weight_kg: 900, volume_cbm: 1 })).body;
+    await api('post', `/shipments/${s.id}/confirm-booking`, 'ops').send({ voyage: 'EY 0912', carrier: 'Etihad Cargo' }).expect(200);
+    const res = (await api('get', '/insight/modal-hub', 'ops')).body;
+    const after = buildHub(res.input, res.now).lanes.Air;
+    expect(Number(after.metrics[0].value)).toBe(Number(before) + 1);
+    expect(after.sections[0].bars.find((b) => b.label.startsWith('EY 0912'))!.used).toBe(4300 + 900);
+  });
+});
+
+describe('gate 17 · explain numbers, document scorecard, notes, fleet & capacity data', () => {
+  it('explain: every dashboard number can list the records behind it, and the value matches the dashboard', async () => {
+    const dash = (await api('get', '/dashboard', 'owner')).body;
+    const active = (await api('get', '/insight/explain/active_shipments', 'owner')).body;
+    expect(active.value).toBe(dash.shipments.active); expect(active.records).toHaveLength(active.value);
+    expect(active.records[0]).toMatchObject({ ref: expect.stringMatching(/^DXB-/), link: expect.stringContaining('/shipments/') });
+    const ar = (await api('get', '/insight/explain/overdue_ar', 'owner')).body;
+    expect(ar.value).toBeCloseTo(ar.records.reduce((n: number, r: any) => n + r.amount, 0), 2);
+    const appr = (await api('get', '/insight/explain/pending_approvals', 'owner')).body;
+    expect(appr.value).toBe(dash.approvals.pending);
+  });
+  it('explain respects permissions: margin needs costs access, invoices need invoice access, unknown metrics 404', async () => {
+    expect((await api('get', '/insight/explain/margin_7d', 'sales')).status).toBe(403);
+    expect((await api('get', '/insight/explain/margin_7d', 'owner')).status).toBe(200);
+    expect((await api('get', '/insight/explain/ready_to_invoice', 'warehouse')).status).toBe(403);
+    expect((await api('get', '/insight/explain/nope', 'owner')).status).toBe(404);
+    expect((await api('get', '/insight/explain/active_shipments', 'customer')).status).toBe(403);
+  });
+  it('document scorecard lists what is missing per shipment and an overall score', async () => {
+    const r = await api('get', '/insight/document-scorecard', 'ops');
+    expect(r.status).toBe(200);
+    expect(r.body.score).toBeGreaterThanOrEqual(0); expect(r.body.score).toBeLessThanOrEqual(100);
+    const confirmed = r.body.shipments.find((s: any) => s.present.some((p: string) => /Bill of Lading|Air Waybill|CMR/.test(p)));
+    expect(confirmed).toBeTruthy();
+    const booked = r.body.shipments.find((s: any) => s.status === 'booked');
+    if (booked) expect(booked.missing.length).toBeGreaterThan(0);
+    expect(r.body.shipments.every((s: any) => s.pct >= 0 && s.pct <= 100)).toBe(true);
+  });
+  it('notes: staff can post and list, only the author or an admin can remove, portal roles are refused', async () => {
+    const posted = await api('post', '/notes', 'ops').send({ body: 'Gate 4 closed after 22:00', priority: 'urgent' });
+    expect(posted.status).toBe(201);
+    expect((await api('post', '/notes', 'ops').send({ body: '' })).status).toBe(400);
+    expect((await api('post', '/notes', 'ops').send({ body: 'x'.repeat(501) })).status).toBe(400);
+    expect((await api('get', '/notes', 'sales')).body.data.some((n: any) => n.id === posted.body.id)).toBe(true);
+    expect((await api('delete', `/notes/${posted.body.id}`, 'sales')).status).toBe(400);
+    expect((await api('delete', `/notes/${posted.body.id}`, 'owner')).status).toBe(200);
+    expect((await api('get', '/notes', 'customer')).status).toBe(403);
+    expect((await api('get', '/notes', 'driver')).status).toBe(403);
+  });
+  it('fleet register and equipment: dispatch can manage them, sales cannot, values are validated', async () => {
+    const eq = await api('post', '/equipment', 'dispatch').send({ code: 'CH-9999', category: 'road_chassis', type: "40' chassis", status: 'operational' });
+    expect(eq.status).toBe(201);
+    expect((await api('post', '/equipment', 'dispatch').send({ code: 'CH-9999', category: 'road_chassis', type: 'dup' })).status).toBeGreaterThanOrEqual(400); // unique per tenant
+    expect((await api('post', '/equipment', 'dispatch').send({ code: 'X', category: 'boat', type: 't' })).status).toBe(400);
+    expect((await api('post', '/equipment', 'sales').send({ code: 'Y', category: 'road_chassis', type: 't' })).status).toBe(403);
+    const v = (await api('get', '/vehicles', 'dispatch')).body.data[0];
+    expect((await api('patch', `/vehicles/${v.id}`, 'dispatch').send({ fuel_pct: 140 })).status).toBe(400);
+    expect((await api('patch', `/vehicles/${v.id}`, 'dispatch').send({ fuel_pct: 55, salik_balance: 500 })).status).toBe(200);
+  });
+  it('carrier capacity: ops can record allotments; units and modes are validated; invalid data never reaches the hub', async () => {
+    const ok = await api('post', '/capacity-allocations', 'ops').send({ mode: 'air', carrier: 'Qatar Airways Cargo', voyage: 'QR 8104', route: 'DXB → DOH', cutoff_at: new Date(Date.now() + 5 * 3600_000).toISOString(), allocated: 5000, other_booked: 100, unit: 'kg' });
+    expect(ok.status).toBe(201);
+    expect((await api('post', '/capacity-allocations', 'ops').send({ mode: 'rail', carrier: 'x', voyage: '1', cutoff_at: new Date().toISOString(), allocated: 1, unit: 'kg' })).status).toBe(400);
+    expect((await api('post', '/capacity-allocations', 'ops').send({ mode: 'sea', carrier: 'x', voyage: '1', cutoff_at: new Date().toISOString(), allocated: -5, unit: 'TEU' })).status).toBe(400);
+    expect((await api('post', '/equipment-pools', 'sales').send({ mode: 'sea', code: 'Z', label: 'z', total: 1 })).status).toBe(403);
+  });
+});

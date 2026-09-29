@@ -14,8 +14,10 @@ function migrationsDir() {
   return dir;
 }
 
-export async function migrate() {
+/** Applies pending migrations in order, each in its own transaction. Returns the names applied this run. */
+export async function migrate(): Promise<string[]> {
   const dir = migrationsDir();
+  const applied: string[] = [];
   await pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
   const done = new Set((await pool.query('SELECT name FROM schema_migrations')).rows.map((r) => r.name));
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
@@ -28,6 +30,7 @@ export async function migrate() {
       await client.query(sql);
       await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [f]);
       await client.query('COMMIT');
+      applied.push(f);
       logger.info(`migration applied: ${f}`);
     } catch (e) {
       await client.query('ROLLBACK');
@@ -36,6 +39,7 @@ export async function migrate() {
       client.release();
     }
   }
+  return applied;
 }
 
 // Run directly: `npm run migrate`

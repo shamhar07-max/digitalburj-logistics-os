@@ -63,6 +63,28 @@ documentsRouter.get(
   }),
 );
 
+
+/** Generated documents are stored as HTML; open them in a print-ready view. Customers see only documents marked public. */
+documentsRouter.get(
+  '/:id/render',
+  requirePerm('documents', 'r'),
+  wrap(async (req, res) => {
+    if (!isUuid(req.params.id)) throw notFound();
+    const params: any[] = [req.user!.tenantId, req.params.id];
+    let extra = '';
+    const cust = portalScope(req);
+    if (cust) {
+      params.push(cust);
+      extra = ' AND d.is_public AND (d.customer_id=$3 OR d.shipment_id IN (SELECT id FROM shipments WHERE customer_id=$3 OR consignee_id=$3))';
+    }
+    const d = await one<any>({ query }, `SELECT d.body_html FROM documents d WHERE d.tenant_id=$1 AND d.id=$2 AND d.origin='generated'${extra}`, params);
+    if (!d?.body_html) throw notFound();
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:");
+    res.type('html').send(d.body_html);
+  }),
+);
+
 /** POD images (signature/photos) for ops review. */
 documentsRouter.get(
   '/pod/:podId/:kind',

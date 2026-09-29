@@ -9,6 +9,8 @@ import { auditFromReq } from '../services/audit';
 import { publish } from '../services/events';
 import { changeShipmentStatus, createShipment, refreshRisk } from '../services/shipments';
 import { randomToken } from '../lib/crypto';
+import { generateShipmentDocuments } from '../services/docgen';
+import { getSettings } from '../services/settings';
 
 export const shipmentsRouter = Router();
 
@@ -27,6 +29,7 @@ const newShipmentSchema = z.object({
   incoterm: z.string().max(20).nullish(),
   cargo_description: z.string().max(500).nullish(),
   container_type: z.string().max(40).nullish(),
+  containers: z.coerce.number().int().min(0).max(999).optional(),
   weight_kg: z.coerce.number().min(0).nullish(),
   volume_cbm: z.coerce.number().min(0).nullish(),
   cargo_value: z.coerce.number().min(0).nullish(),
@@ -86,7 +89,7 @@ shipmentsRouter.get(
     const [milestones, charges, documents, customs, stops, invoices, audits] = await Promise.all([
       many({ query }, 'SELECT * FROM milestones WHERE shipment_id=$1 ORDER BY sort', [s.id]),
       isCustomer ? Promise.resolve([]) : many({ query }, `SELECT ch.*, (SELECT name FROM suppliers x WHERE x.id=ch.supplier_id) AS supplier_name FROM charges ch WHERE ch.shipment_id=$1 ${canCost ? '' : "AND ch.kind='revenue'"} ORDER BY ch.kind, ch.created_at`, [s.id]),
-      many({ query }, `SELECT id, type, name, mime, size, is_public, created_at FROM documents WHERE shipment_id=$1 ${isCustomer ? 'AND is_public' : ''} ORDER BY created_at DESC`, [s.id]),
+      many({ query }, `SELECT id, type, name, mime, size, is_public, created_at, origin, doc_no, version, generated_at FROM documents WHERE shipment_id=$1 ${isCustomer ? 'AND is_public' : ''} ORDER BY created_at DESC`, [s.id]),
       isCustomer ? Promise.resolve([]) : many({ query }, 'SELECT * FROM customs_declarations WHERE shipment_id=$1 ORDER BY created_at DESC', [s.id]),
       isCustomer ? Promise.resolve([]) : many({ query }, `SELECT ts.*, tr.number AS trip_number, (SELECT name FROM drivers d WHERE d.id=tr.driver_id) AS driver_name FROM trip_stops ts JOIN trips tr ON tr.id=ts.trip_id WHERE ts.shipment_id=$1 ORDER BY ts.seq`, [s.id]),
       many({ query }, 'SELECT id, number, status, total, paid, due_date FROM invoices WHERE shipment_id=$1 ORDER BY issue_date DESC', [s.id]),
@@ -131,6 +134,66 @@ shipmentsRouter.patch(
     publish({ tenantId: t, type: 'milestone.updated', entityType: 'shipment', entityId: req.params.id, payload: { code: m.code, status }, userId: req.user!.id });
     await auditFromReq(req, 'milestone', 'shipment', req.params.id, { code: m.code, status });
     res.json(row);
+  }),
+);
+
+
+// ── Booking confirmation (drives the velocity metric) and document generation ──
+const bookingSchema = z.object({
+  carrier: z.string().max(120).nullish(),
+  vessel: z.string().max(120).nullish(),
+  voyage: z.string().max(40).nullish(), // voyage (sea) or flight number (air)
+  bl_number: z.string().max(60).nullish(),
+  awb_number: z.string().max(60).nullish(),
+  container_no: z.string().max(40).nullish(),
+  container_type: z.string().max(40).nullish(),
+  containers: z.coerce.number().int().min(0).max(999).optional(),
+  etd: z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullish(),
+  eta: z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullish(),
+});
+
+/** Confirm the carrier booking: records the booking details, moves booked → confirmed, and (by default) generates the document set. */
+shipmentsRouter.post(
+  '/:id/confirm-booking',
+  requirePerm('shipments', 'u'),
+  wrap(async (req, res) => {
+    if (!isUuid(req.params.id)) throw notFound();
+    const b = bookingSchema.parse(req.body ?? {});
+    const t = req.user!.tenantId;
+    const result = await tx(async (db) => {
+      const cur = await one<any>(db, 'SELECT status FROM shipments WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [req.params.id, t]);
+      if (!cur) throw notFound('Shipment not found');
+      if (cur.status !== 'booked') throw badRequest(`Booking can only be confirmed while the shipment is "booked" (this one is ${cur.status})`);
+      await db.query(
+        `UPDATE shipments SET carrier=COALESCE($3,carrier), vessel=COALESCE($4,vessel), voyage=COALESCE($5,voyage), bl_number=COALESCE($6,bl_number), awb_number=COALESCE($7,awb_number),
+           container_no=COALESCE($8,container_no), container_type=COALESCE($9,container_type), containers=COALESCE($10,containers), etd=COALESCE($11::date,etd), eta=COALESCE($12::date,eta),
+           booking_confirmed_by=$13 WHERE id=$1 AND tenant_id=$2`,
+        [req.params.id, t, b.carrier ?? null, b.vessel ?? null, b.voyage ?? null, b.bl_number ?? null, b.awb_number ?? null, b.container_no ?? null, b.container_type ?? null, b.containers ?? null, b.etd?.slice(0, 10) ?? null, b.eta?.slice(0, 10) ?? null, req.user!.id],
+      );
+      const shipment = await changeShipmentStatus(db, t, req.user!.id, req.params.id, 'confirmed', 'Booking confirmed');
+      const settings = await getSettings(db, t);
+      const documents = settings.auto_generate_docs === false ? [] : await generateShipmentDocuments(db, t, req.user!.id, req.params.id, { reason: 'Booking confirmed' });
+      await auditFromReq(req, 'confirm_booking', 'shipment', req.params.id, { ...b, documents: documents.length }, db);
+      return { shipment, documents };
+    });
+    publish({ tenantId: t, type: 'booking.confirmed', entityType: 'shipment', entityId: req.params.id, payload: { number: result.shipment.number }, userId: req.user!.id });
+    res.json(result);
+  }),
+);
+
+/** (Re)generate the mode-specific document set. Each call adds a new version of each document. */
+shipmentsRouter.post(
+  '/:id/generate-documents',
+  requirePerm('shipments', 'u'),
+  wrap(async (req, res) => {
+    if (!isUuid(req.params.id)) throw notFound();
+    const b = z.object({ types: z.array(z.enum(['BL', 'AWB', 'CMR', 'PACKING_LIST', 'COMMERCIAL_INVOICE'])).optional() }).parse(req.body ?? {});
+    const documents = await tx(async (db) => {
+      const docs = await generateShipmentDocuments(db, req.user!.tenantId, req.user!.id, req.params.id, { types: b.types, reason: 'Manual generation' });
+      await auditFromReq(req, 'generate_documents', 'shipment', req.params.id, { types: docs.map((d) => d.type) }, db);
+      return docs;
+    });
+    res.status(201).json({ documents });
   }),
 );
 

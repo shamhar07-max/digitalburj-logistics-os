@@ -177,7 +177,7 @@ adminRouter.patch(
       trade_license: z.string().max(60).optional(),
       settings: z.object({
         min_margin_pct: z.coerce.number().min(-100).max(100).optional(), quote_approval_threshold: z.coerce.number().min(0).optional(), po_approval_threshold: z.coerce.number().min(0).optional(),
-        expense_approval_threshold: z.coerce.number().min(0).optional(), invoice_terms_days: z.coerce.number().int().min(0).max(365).optional(), ai_enabled: z.boolean().optional(),
+        expense_approval_threshold: z.coerce.number().min(0).optional(), invoice_terms_days: z.coerce.number().int().min(0).max(365).optional(), ai_enabled: z.boolean().optional(), auto_generate_docs: z.boolean().optional(),
       }).optional(),
     }).parse(req.body);
     const row = await one<any>({ query }, `UPDATE tenants SET name=COALESCE($2,name), trn=COALESCE(NULLIF($3,''),trn), trade_license=COALESCE($4,trade_license), settings=settings || COALESCE($5::jsonb,'{}'::jsonb) WHERE id=$1 RETURNING id, name, trn, trade_license, settings`,

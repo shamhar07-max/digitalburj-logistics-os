@@ -38,6 +38,8 @@ export interface Resource {
   dateCol?: string;
   /** extra select expressions (trusted SQL), alias `t` is the main table */
   select?: string;
+  /** column names always removed from responses (large or internal columns) */
+  hidden?: string[];
   /** column names (including select aliases) stripped for users lacking costs:r */
   sensitive?: string[];
   entityScoped?: boolean;
