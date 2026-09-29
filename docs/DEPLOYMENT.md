@@ -20,6 +20,34 @@ The app runs pending migrations on start. Create your first tenant via the publi
 
 Build the `Dockerfile`, point `DATABASE_URL` at managed Postgres (`DATABASE_SSL=true` if TLS is required), set liveness `GET /healthz` and readiness `GET /readyz` (readiness checks the database), expose port 3001, and run ≥1 replica. Multiple replicas are safe: migrations are transactional and the scheduler is advisory-locked. WebSocket upgrade on `/ws` must be allowed by the proxy. Use S3 storage when running more than one replica.
 
+## Neon + Vercel (serverless)
+
+Database on Neon, app on Vercel. `vercel.json` serves the SPA as static output and runs the whole Express API as one function (`api/index.mjs` → `apps/api/dist/serverless.js`).
+
+1. **Neon**: create a project (Postgres 16, pick a region near your users), copy the *pooled* connection string. Apply migrations once: `DATABASE_URL=… DATABASE_SSL=true npm run db:migrate` (the serverless entry does not migrate on boot).
+2. **Vercel**: import the GitHub repo (the Vercel GitHub app must have access to the repo's owner). Framework "Other"; `vercel.json` supplies install/build/output. Set env vars for Production (and Preview if used):
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Neon pooled URL (mark sensitive) |
+| `DATABASE_SSL` | `true` |
+| `PG_POOL_MAX` | `3` |
+| `JWT_SECRET`, `ENCRYPTION_KEY` | fresh `openssl rand -hex 32` values |
+| `CRON_SECRET` | `openssl rand -hex 24` (Vercel sends it to the cron route) |
+| `ENABLE_SCHEDULER` | `false` |
+| `STORAGE_DRIVER` / `UPLOAD_DIR` | `local` / `/tmp/uploads` (ephemeral — see below) |
+| `WEB_ORIGIN`, `PUBLIC_WEB_URL` | your deployment URL |
+
+3. Register the first company at `/register` (or `POST /api/auth/register`). Do not run the demo seed against a real database.
+
+**Serverless trade-offs** (use the Docker path if you need any of these):
+
+* **No live updates** – WebSockets are unavailable, so the SPA is built with `VITE_DISABLE_REALTIME=1` and refreshes on focus/navigation.
+* **Scheduler is a cron** – `vercel.json` runs `/api/cron` daily (Hobby plans allow once per day; Pro can run it more often). It marks invoices overdue, expires quotes, refreshes risk and raises expiry alerts.
+* **Uploads are not durable** – `/tmp` is per-instance and ephemeral. Configure S3-compatible storage (`STORAGE_DRIVER=s3`, `S3_*`) before accepting documents, PODs or receipts.
+* **Automation webhooks** run after the response and may be cut off when the function freezes; use the long-running container for reliable outbound webhooks.
+* Rate limits are per instance.
+
 ## Scaling and ops
 
 * Stateless app tier – scale horizontally; DB is the bottleneck (add read replica for reports).
