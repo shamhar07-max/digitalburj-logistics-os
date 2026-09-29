@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Theme CSS Variables - Day Mode */
+    --color-bg-app: #F8FAFC;
+    --color-bg-surface: #FFFFFF;
+    --color-bg-subtle: #F1F5F9;
+    --color-border: #E2E8F0;
+    --color-border-subtle: #F1F5F9;
+    --color-text-main: #0F172A;
+    --color-text-muted: #64748B;
+    --color-text-subtle: #94A3B8;
+    --color-brand: #E8472B;
+    --color-brand-hover: #D13B20;
+  }
+
+  [data-theme="dark"],
+  .dark {
+    /* Theme CSS Variables - Night-Shift Operations Dark Mode */
+    --color-bg-app: #09111E;
+    --color-bg-surface: #10192A;
+    --color-bg-subtle: #19243A;
+    --color-border: #23324E;
+    --color-border-subtle: #1B2942;
+    --color-text-main: #F8FAFC;
+    --color-text-muted: #94A3B8;
+    --color-text-subtle: #64748B;
+    --color-brand: #F05A3E;
+    --color-brand-hover: #E8472B;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-bg-app);
+    color: var(--color-text-main);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Custom slick scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(232, 71, 43, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(232, 71, 43, 0);
+  }
+}
+
+.pulse-glow {
+  animation: pulseGlow 2s infinite;
+}
