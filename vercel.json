@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci",
+  "buildCommand": "VITE_DISABLE_REALTIME=1 npm run build",
+  "outputDirectory": "apps/web/dist",
+  "functions": {
+    "api/index.mjs": { "maxDuration": 30, "includeFiles": "apps/api/dist/**" },
+    "api/cron.mjs": { "maxDuration": 60, "includeFiles": "apps/api/dist/**" }
+  },
+  "crons": [{ "path": "/api/cron", "schedule": "0 3 * * *" }],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/healthz", "destination": "/api" },
+    { "source": "/readyz", "destination": "/api" },
+    { "source": "/((?!api/|assets/|brand/)[^.]*)", "destination": "/index.html" }
+  ]
+}

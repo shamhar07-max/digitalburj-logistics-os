@@ -10,7 +10,7 @@ pg.types.setTypeParser(1082, (v) => v);
 export const pool = new pg.Pool({
   connectionString: config.DATABASE_URL,
   ssl: config.DATABASE_SSL ? { rejectUnauthorized: false } : undefined,
-  max: 20,
+  max: config.PG_POOL_MAX,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
 });

@@ -23,6 +23,8 @@ const schema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().default('me-central-1'),
   S3_ENDPOINT: z.string().optional(),
+  /** max pg connections per process; keep small (2-3) on serverless so instances do not exhaust the database */
+  PG_POOL_MAX: z.coerce.number().int().min(1).default(20),
   ENABLE_SCHEDULER: bool(true),
   /** max login attempts per IP per 15 min (raise only for automated test runs) */
   LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).default(30),

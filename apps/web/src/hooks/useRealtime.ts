@@ -8,7 +8,8 @@ export function useRealtime() {
   const token = useSession((s) => s.accessToken);
   const qc = useQueryClient();
   useEffect(() => {
-    if (!token) return;
+    // WebSockets are unavailable on serverless hosts; build with VITE_DISABLE_REALTIME=1 and rely on refetch-on-focus
+    if (!token || import.meta.env.VITE_DISABLE_REALTIME === '1') return;
     let ws: WebSocket | null = null;
     let closed = false;
     let retry = 0;
