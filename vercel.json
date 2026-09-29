@@ -10,6 +10,9 @@
     "api/seed.mjs": { "maxDuration": 300, "includeFiles": "apps/api/dist/**" }
   },
   "crons": [{ "path": "/api/cron", "schedule": "0 3 * * *" }],
+  "headers": [
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }] }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api" },
     { "source": "/healthz", "destination": "/api" },
