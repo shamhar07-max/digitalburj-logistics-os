@@ -1,44 +1,12 @@
-# Local / small-server deployment. `cp .env.example .env`, set the secrets, then:  docker compose up -d --build
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-digitalburj}
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
-      POSTGRES_DB: ${POSTGRES_DB:-digitalburj}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-digitalburj} -d ${POSTGRES_DB:-digitalburj}']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  app:
+  digitalburj:
     build: .
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - '${PORT:-3001}:3001'
+    ports: ["8080:8080"]
+    env_file: [.env]
     environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-digitalburj}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-digitalburj}
-      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -hex 32)}"
-      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?set ENCRYPTION_KEY in .env (openssl rand -hex 32)}"
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
-      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3001}
-      ENABLE_SCHEDULER: 'true'
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM:-DigitalBurj <no-reply@example.com>}
-      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-change-me}
-      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      DATA_DIR: /data
     volumes:
-      - uploads:/app/apps/api/uploads
-
+      - digitalburj-data:/data
 volumes:
-  pgdata:
-  uploads:
+  digitalburj-data:

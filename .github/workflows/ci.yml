@@ -1,32 +1,32 @@
 name: CI
-on:
-  push:
-    branches: [main, 'claude/**']
-  pull_request:
+on: [push, pull_request]
 jobs:
   verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Run every suite against a fresh, empty database
+        run: bash tests/run-all.sh
+  verify-postgres:
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
-        env:
-          POSTGRES_USER: digitalburj
-          POSTGRES_PASSWORD: dev_password
-          POSTGRES_DB: digitalburj_test
+        env: { POSTGRES_PASSWORD: postgres }
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U digitalburj" --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      DATABASE_URL: postgresql://digitalburj:dev_password@localhost:5432/digitalburj_test
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: npm run type-check
-      - run: npm run test
       - run: npm run build
-      - name: Docs are in sync with the code
-        run: |
-          python3 scripts/gen-api-docs.py
-          git diff --exit-code docs/API.md
+      - name: Run every suite against PostgreSQL (a fresh database per suite)
+        run: bash tests/run-all.sh
+        env: { TEST_PG_ADMIN_URL: 'postgresql://postgres:postgres@localhost:5432/postgres' }
